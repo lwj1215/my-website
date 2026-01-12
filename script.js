@@ -84,6 +84,14 @@ const syncStatus = document.getElementById('syncStatus');
 const syncStatusText = document.getElementById('syncStatusText');
 const modalContent = document.querySelector('.modal-content');
 const modalHeader = document.querySelector('.modal-header');
+const exportBtn = document.getElementById('exportBtn');
+const importBtn = document.getElementById('importBtn');
+const importFileInput = document.getElementById('importFileInput');
+const loginOverlay = document.getElementById('loginOverlay');
+const loginForm = document.getElementById('loginForm');
+const loginUsernameInput = document.getElementById('loginUsername');
+const loginPasswordInput = document.getElementById('loginPassword');
+const loginError = document.getElementById('loginError');
 
 // 拖动相关变量
 let isDragging = false;
@@ -96,6 +104,45 @@ let yOffset = 0;
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
+    initLogin();
+});
+
+// 登录初始化
+function initLogin() {
+    // 已登录则直接进入
+    if (localStorage.getItem('loggedIn') === 'true') {
+        startApp();
+        return;
+    }
+    
+    // 监听登录表单
+    loginForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        handleLogin();
+    });
+    
+    loginOverlay.style.display = 'flex';
+}
+
+// 处理登录
+function handleLogin() {
+    const username = loginUsernameInput.value.trim();
+    const password = loginPasswordInput.value.trim();
+    
+    const isValid = username === 'lwj1215' && password === '1215lwj1215';
+    
+    if (isValid) {
+        localStorage.setItem('loggedIn', 'true');
+        loginError.style.display = 'none';
+        loginOverlay.style.display = 'none';
+        startApp();
+    } else {
+        loginError.style.display = 'block';
+    }
+}
+
+// 启动主程序（仅登录后调用）
+function startApp() {
     // 初始化Firebase
     initFirebase();
     
@@ -116,6 +163,9 @@ document.addEventListener('DOMContentLoaded', () => {
     searchBtn.addEventListener('click', performSearch);
     clearBtn.addEventListener('click', clearSearch);
     addPurchaseItemBtn.addEventListener('click', addPurchaseItemGroup);
+    exportBtn.addEventListener('click', exportData);
+    importBtn.addEventListener('click', () => importFileInput.click());
+    importFileInput.addEventListener('change', handleImportFile);
     
     // 分页事件监听
     firstPageBtn.addEventListener('click', () => goToPage(1));
@@ -142,7 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 初始化拖动功能
     initDrag();
-});
+}
 
 // 初始化拖动功能
 function initDrag() {
@@ -910,4 +960,140 @@ function clearSearch() {
     filteredPurchases = [...purchases];
     currentPage = 1;
     renderTable();
+}
+
+// 导出数据到JSON文件
+function exportData() {
+    try {
+        // 准备导出数据
+        const exportData = {
+            version: '1.0',
+            exportDate: new Date().toISOString(),
+            purchases: purchases
+        };
+        
+        // 转换为JSON字符串
+        const jsonString = JSON.stringify(exportData, null, 2);
+        
+        // 创建Blob对象
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        
+        // 创建下载链接
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        
+        // 生成文件名（包含日期时间）
+        const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+        const timeStr = new Date().toTimeString().split(' ')[0].replace(/:/g, '');
+        a.download = `采购数据_${dateStr}_${timeStr}.json`;
+        
+        // 触发下载
+        document.body.appendChild(a);
+        a.click();
+        
+        // 清理
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        alert('数据导出成功！文件已保存到下载文件夹。');
+    } catch (error) {
+        console.error('导出数据失败:', error);
+        alert('导出数据失败，请重试。');
+    }
+}
+
+// 处理导入文件
+function handleImportFile(event) {
+    const file = event.target.files[0];
+    if (!file) {
+        return;
+    }
+    
+    // 检查文件类型
+    if (!file.name.endsWith('.json')) {
+        alert('请选择JSON格式的文件！');
+        importFileInput.value = '';
+        return;
+    }
+    
+    const reader = new FileReader();
+    
+    reader.onload = function(e) {
+        try {
+            const content = e.target.result;
+            const importData = JSON.parse(content);
+            
+            // 验证数据格式
+            if (!importData.purchases || !Array.isArray(importData.purchases)) {
+                throw new Error('文件格式不正确，缺少purchases数组');
+            }
+            
+            // 确认导入操作
+            const confirmMessage = `准备导入 ${importData.purchases.length} 条采购记录。\n\n` +
+                `当前有 ${purchases.length} 条记录。\n\n` +
+                `请选择导入方式：\n` +
+                `确定：合并数据（保留现有数据，添加新数据）\n` +
+                `取消：替换数据（清空现有数据，使用导入数据）`;
+            
+            if (confirm(confirmMessage)) {
+                // 合并模式：添加新数据，避免重复
+                importData.purchases.forEach(newPurchase => {
+                    // 检查是否已存在（通过ID或订单号+创建时间判断）
+                    const exists = purchases.some(existing => {
+                        if (newPurchase.id && existing.id) {
+                            return existing.id === newPurchase.id;
+                        }
+                        return existing.orderNumber === newPurchase.orderNumber &&
+                               existing.createdAt === newPurchase.createdAt;
+                    });
+                    
+                    if (!exists) {
+                        purchases.push(newPurchase);
+                    }
+                });
+                
+                alert(`导入成功！已合并 ${importData.purchases.length} 条记录。`);
+            } else {
+                // 替换模式：清空现有数据，使用导入数据
+                if (confirm('确定要替换所有现有数据吗？此操作不可撤销！')) {
+                    purchases = importData.purchases;
+                    alert(`导入成功！已替换为 ${purchases.length} 条记录。`);
+                } else {
+                    importFileInput.value = '';
+                    return;
+                }
+            }
+            
+            // 重新排序
+            purchases.sort((a, b) => {
+                const dateA = new Date(a.orderDate || a.createdAt || a.updatedAt || 0).getTime();
+                const dateB = new Date(b.orderDate || b.createdAt || b.updatedAt || 0).getTime();
+                return dateB - dateA;
+            });
+            
+            // 保存数据
+            saveData();
+            
+            // 更新显示
+            filteredPurchases = [...purchases];
+            currentPage = 1;
+            renderTable();
+            
+            // 清空文件输入
+            importFileInput.value = '';
+            
+        } catch (error) {
+            console.error('导入数据失败:', error);
+            alert('导入数据失败：' + error.message + '\n请检查文件格式是否正确。');
+            importFileInput.value = '';
+        }
+    };
+    
+    reader.onerror = function() {
+        alert('读取文件失败，请重试。');
+        importFileInput.value = '';
+    };
+    
+    reader.readAsText(file);
 }
