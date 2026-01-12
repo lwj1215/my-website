@@ -10,6 +10,28 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 </head>
 <body>
+    <!-- 登录遮罩 -->
+    <div id="loginOverlay" class="login-overlay">
+        <div class="login-card">
+            <h2>登录</h2>
+            <p class="login-desc">请输入账号与密码进入系统</p>
+            <form id="loginForm" class="login-form">
+                <div class="login-group">
+                    <label for="loginUsername">账号</label>
+                    <input type="text" id="loginUsername" autocomplete="username" required>
+                </div>
+                <div class="login-group">
+                    <label for="loginPassword">密码</label>
+                    <input type="password" id="loginPassword" autocomplete="current-password" required>
+                </div>
+                <div class="login-actions">
+                    <button type="submit" class="btn btn-login">登录</button>
+                    <p id="loginError" class="login-error" style="display:none;">账号或密码错误</p>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div class="container">
         <header>
             <h1>采购管理系统</h1>
@@ -18,6 +40,9 @@
                     <span class="sync-indicator"></span>
                     <span id="syncStatusText">云端同步</span>
                 </span>
+                <button class="btn btn-secondary" id="exportBtn" title="导出数据到文件">导出数据</button>
+                <button class="btn btn-secondary" id="importBtn" title="从文件导入数据">导入数据</button>
+                <input type="file" id="importFileInput" accept=".json" style="display: none;">
                 <button class="btn btn-primary" id="addBtn">添加采购记录</button>
             </div>
         </header>
