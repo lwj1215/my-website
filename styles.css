@@ -907,6 +907,16 @@ form::-webkit-scrollbar-thumb:hover {
     font-size: 13px;
 }
 
+.login-success {
+    color: #28a745;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.login-overlay.hidden {
+    display: none !important;
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
     header {
