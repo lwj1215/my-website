@@ -1,0 +1,913 @@
+// 采购数据存储
+let purchases = [];
+let editingIndex = -1;
+
+// 分页相关
+let currentPage = 1;
+const itemsPerPage = 10;
+let filteredPurchases = []; // 用于存储过滤后的数据（搜索时使用）
+
+// Firebase配置
+const firebaseConfig = {
+    // 这里需要用户配置自己的Firebase项目信息
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_AUTH_DOMAIN",
+    databaseURL: "YOUR_DATABASE_URL",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_STORAGE_BUCKET",
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+    appId: "YOUR_APP_ID"
+};
+
+// 初始化Firebase
+let database = null;
+let isFirebaseConfigured = false;
+
+// 检查Firebase配置
+function initFirebase() {
+    try {
+        if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+            firebase.initializeApp(firebaseConfig);
+            database = firebase.database();
+            isFirebaseConfigured = true;
+            console.log('Firebase已初始化');
+            updateSyncStatus(true);
+            return true;
+        } else {
+            console.log('Firebase未配置，使用本地存储');
+            updateSyncStatus(false);
+            return false;
+        }
+    } catch (error) {
+        console.error('Firebase初始化失败:', error);
+        updateSyncStatus(false);
+        return false;
+    }
+}
+
+// 更新同步状态显示
+function updateSyncStatus(isConnected) {
+    if (isConnected) {
+        syncStatus.style.display = 'flex';
+        syncStatusText.textContent = '云端同步';
+        syncStatus.className = 'sync-status sync-active';
+    } else {
+        syncStatus.style.display = 'flex';
+        syncStatusText.textContent = '本地存储';
+        syncStatus.className = 'sync-status sync-local';
+    }
+}
+
+// DOM元素
+const addBtn = document.getElementById('addBtn');
+const modal = document.getElementById('modal');
+const closeBtn = document.querySelector('.close');
+const cancelBtn = document.getElementById('cancelBtn');
+const form = document.getElementById('purchaseForm');
+const tableBody = document.getElementById('tableBody');
+const modalTitle = document.getElementById('modalTitle');
+const searchInput = document.getElementById('searchInput');
+const searchBtn = document.getElementById('searchBtn');
+const clearBtn = document.getElementById('clearBtn');
+const searchResults = document.getElementById('searchResults');
+const searchResultsContent = document.getElementById('searchResultsContent');
+const purchaseItemsContainer = document.getElementById('purchaseItemsContainer');
+const addPurchaseItemBtn = document.getElementById('addPurchaseItemBtn');
+const pagination = document.getElementById('pagination');
+const pageInfo = document.getElementById('pageInfo');
+const pageNumbers = document.getElementById('pageNumbers');
+const firstPageBtn = document.getElementById('firstPageBtn');
+const prevPageBtn = document.getElementById('prevPageBtn');
+const nextPageBtn = document.getElementById('nextPageBtn');
+const lastPageBtn = document.getElementById('lastPageBtn');
+const syncStatus = document.getElementById('syncStatus');
+const syncStatusText = document.getElementById('syncStatusText');
+const modalContent = document.querySelector('.modal-content');
+const modalHeader = document.querySelector('.modal-header');
+
+// 拖动相关变量
+let isDragging = false;
+let currentX;
+let currentY;
+let initialX;
+let initialY;
+let xOffset = 0;
+let yOffset = 0;
+
+// 初始化
+document.addEventListener('DOMContentLoaded', () => {
+    // 初始化Firebase
+    initFirebase();
+    
+    // 加载数据（如果是Firebase，loadData会设置监听器）
+    loadData();
+    
+    // 如果不是Firebase，需要手动设置filteredPurchases和渲染
+    if (!isFirebaseConfigured) {
+        filteredPurchases = [...purchases];
+        renderTable();
+    }
+    
+    // 事件监听
+    addBtn.addEventListener('click', () => openModal());
+    closeBtn.addEventListener('click', () => closeModal());
+    cancelBtn.addEventListener('click', () => closeModal());
+    form.addEventListener('submit', handleSubmit);
+    searchBtn.addEventListener('click', performSearch);
+    clearBtn.addEventListener('click', clearSearch);
+    addPurchaseItemBtn.addEventListener('click', addPurchaseItemGroup);
+    
+    // 分页事件监听
+    firstPageBtn.addEventListener('click', () => goToPage(1));
+    prevPageBtn.addEventListener('click', () => goToPage(currentPage - 1));
+    nextPageBtn.addEventListener('click', () => goToPage(currentPage + 1));
+    lastPageBtn.addEventListener('click', () => {
+        const totalPages = Math.ceil(filteredPurchases.length / itemsPerPage);
+        goToPage(totalPages);
+    });
+    
+    // 搜索框回车键搜索
+    searchInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            performSearch();
+        }
+    });
+    
+    // 点击模态框外部关闭
+    window.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeModal();
+        }
+    });
+    
+    // 初始化拖动功能
+    initDrag();
+});
+
+// 初始化拖动功能
+function initDrag() {
+    if (!modalHeader || !modalContent) return;
+    
+    modalHeader.addEventListener('mousedown', dragStart);
+    
+    // 重置位置
+    resetModalPosition();
+}
+
+// 重置模态框位置
+function resetModalPosition() {
+    if (modalContent) {
+        xOffset = 0;
+        yOffset = 0;
+        isDragging = false;
+        modalContent.style.transform = '';
+        modalContent.style.margin = '3% auto';
+        modalContent.style.left = '';
+        modalContent.style.top = '';
+        modalContent.classList.remove('dragging');
+    }
+}
+
+// 开始拖动
+function dragStart(e) {
+    // 如果点击的是关闭按钮，不拖动
+    if (e.target.classList.contains('close') || e.target.closest('.close')) {
+        return;
+    }
+    
+    // 如果点击的不是标题栏，不拖动
+    if (e.target !== modalHeader && !modalHeader.contains(e.target)) {
+        return;
+    }
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    isDragging = true;
+    modalContent.classList.add('dragging');
+    
+    // 获取模态框的当前位置
+    const rect = modalContent.getBoundingClientRect();
+    const currentLeft = rect.left;
+    const currentTop = rect.top;
+    
+    // 计算鼠标相对于模态框的偏移
+    initialX = e.clientX - currentLeft;
+    initialY = e.clientY - currentTop;
+    
+    // 设置定位方式
+    modalContent.style.margin = '0';
+    modalContent.style.position = 'fixed';
+    modalContent.style.left = currentLeft + 'px';
+    modalContent.style.top = currentTop + 'px';
+    
+    // 添加全局事件监听
+    document.addEventListener('mousemove', drag);
+    document.addEventListener('mouseup', dragEnd);
+}
+
+// 拖动中
+function drag(e) {
+    if (!isDragging) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // 计算新位置
+    const newX = e.clientX - initialX;
+    const newY = e.clientY - initialY;
+    
+    // 限制在视口内
+    const maxX = window.innerWidth - modalContent.offsetWidth;
+    const maxY = window.innerHeight - modalContent.offsetHeight;
+    
+    const constrainedX = Math.max(0, Math.min(newX, maxX));
+    const constrainedY = Math.max(0, Math.min(newY, maxY));
+    
+    // 更新位置
+    modalContent.style.left = constrainedX + 'px';
+    modalContent.style.top = constrainedY + 'px';
+    
+    currentX = constrainedX;
+    currentY = constrainedY;
+}
+
+// 结束拖动
+function dragEnd(e) {
+    if (!isDragging) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    isDragging = false;
+    modalContent.classList.remove('dragging');
+    
+    // 移除全局事件监听
+    document.removeEventListener('mousemove', drag);
+    document.removeEventListener('mouseup', dragEnd);
+}
+
+// 加载数据
+function loadData() {
+    if (isFirebaseConfigured) {
+        // 从Firebase加载数据（使用订单号作为key）
+        const purchasesRef = database.ref('purchases');
+        purchasesRef.on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                // 将对象转换为数组并按订单日期倒序排列（最新的在前）
+                purchases = Object.values(data);
+                purchases.sort((a, b) => {
+                    const dateA = new Date(a.orderDate || a.createdAt || a.updatedAt || 0).getTime();
+                    const dateB = new Date(b.orderDate || b.createdAt || b.updatedAt || 0).getTime();
+                    return dateB - dateA; // 倒序：最新日期在前
+                });
+                filteredPurchases = [...purchases];
+                renderTable();
+            } else {
+                purchases = [];
+                filteredPurchases = [];
+                renderTable();
+            }
+        }, (error) => {
+            console.error('加载数据失败:', error);
+            updateSyncStatus(false);
+        });
+    } else {
+        // 从本地存储加载数据
+        const saved = localStorage.getItem('purchases');
+        if (saved) {
+            purchases = JSON.parse(saved);
+            // 按订单日期倒序排列（最新的在前）
+            purchases.sort((a, b) => {
+                const dateA = new Date(a.orderDate || a.createdAt || a.updatedAt || 0).getTime();
+                const dateB = new Date(b.orderDate || b.createdAt || b.updatedAt || 0).getTime();
+                return dateB - dateA; // 倒序：最新日期在前
+            });
+        }
+    }
+}
+
+// 保存数据
+function saveData() {
+    if (isFirebaseConfigured) {
+        // 保存到Firebase（使用唯一ID作为key，支持订单号重复）
+        const purchasesRef = database.ref('purchases');
+        const purchasesObj = {};
+        purchases.forEach((purchase) => {
+            // 如果没有ID，生成一个
+            const id = purchase.id || Date.now().toString(36) + Math.random().toString(36).substr(2);
+            purchase.id = id;
+            purchasesObj[id] = purchase;
+        });
+        purchasesRef.set(purchasesObj).then(() => {
+            console.log('数据已保存到云端');
+        }).catch((error) => {
+            console.error('保存数据失败:', error);
+            alert('保存数据失败，请检查网络连接');
+            updateSyncStatus(false);
+        });
+    } else {
+        // 保存到本地存储
+        localStorage.setItem('purchases', JSON.stringify(purchases));
+    }
+}
+
+// 添加采购项组
+function addPurchaseItemGroup(purchaseItem = { supplier: '', items: [] }) {
+    const purchaseItemGroup = document.createElement('div');
+    purchaseItemGroup.className = 'purchase-item-group';
+    
+    // 采购商输入
+    const header = document.createElement('div');
+    header.className = 'purchase-item-header';
+    
+    const supplierInput = document.createElement('input');
+    supplierInput.type = 'text';
+    supplierInput.placeholder = '请输入采购商姓名';
+    supplierInput.value = purchaseItem.supplier || '';
+    supplierInput.required = false; // 采购项改为非必填
+    supplierInput.className = 'supplier-input';
+    
+    const removePurchaseItemBtn = document.createElement('button');
+    removePurchaseItemBtn.type = 'button';
+    removePurchaseItemBtn.className = 'btn-remove-purchase-item';
+    removePurchaseItemBtn.textContent = '删除采购项';
+    removePurchaseItemBtn.onclick = () => {
+        if (purchaseItemsContainer.children.length > 1) {
+            purchaseItemGroup.remove();
+            // 更新第一个采购商输入框的required属性（已改为非必填，但保留逻辑）
+            if (purchaseItemsContainer.children.length > 0) {
+                purchaseItemsContainer.children[0].querySelector('.supplier-input').required = false;
+            }
+        }
+    };
+    
+    header.appendChild(supplierInput);
+    header.appendChild(removePurchaseItemBtn);
+    
+    // 物品容器
+    const itemsContainer = document.createElement('div');
+    itemsContainer.className = 'items-container';
+    
+    // 添加物品按钮
+    const addItemBtn = document.createElement('button');
+    addItemBtn.type = 'button';
+    addItemBtn.className = 'btn-add-item';
+    addItemBtn.textContent = '+ 添加物品';
+    addItemBtn.onclick = () => addItemInput(itemsContainer);
+    
+    // 如果有预设物品，加载它们
+    if (purchaseItem.items && purchaseItem.items.length > 0) {
+        purchaseItem.items.forEach(item => addItemInput(itemsContainer, item));
+    } else {
+        addItemInput(itemsContainer);
+    }
+    
+    purchaseItemGroup.appendChild(header);
+    purchaseItemGroup.appendChild(itemsContainer);
+    purchaseItemGroup.appendChild(addItemBtn);
+    purchaseItemsContainer.appendChild(purchaseItemGroup);
+}
+
+// 添加物品输入框
+function addItemInput(itemsContainer, value = '') {
+    const itemGroup = document.createElement('div');
+    itemGroup.className = 'item-input-group';
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = '请输入物品名称';
+    input.value = value;
+    input.required = false; // 物品改为非必填
+    
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'btn-remove-item';
+    removeBtn.textContent = '删除';
+    removeBtn.onclick = () => {
+        if (itemsContainer.children.length > 1) {
+            itemGroup.remove();
+            // 更新第一个输入框的required属性（已改为非必填，但保留逻辑）
+            if (itemsContainer.children.length > 0) {
+                itemsContainer.children[0].querySelector('input').required = false;
+            }
+        }
+    };
+    
+    itemGroup.appendChild(input);
+    itemGroup.appendChild(removeBtn);
+    itemsContainer.appendChild(itemGroup);
+}
+
+// 打开模态框
+function openModal(index = -1) {
+    editingIndex = index;
+    
+    // 重置模态框位置
+    resetModalPosition();
+    
+    // 清空采购项容器
+    purchaseItemsContainer.innerHTML = '';
+    
+    if (index >= 0) {
+        // 编辑模式
+        modalTitle.textContent = '编辑采购记录';
+        const purchase = purchases[index];
+        document.getElementById('buyerName').value = purchase.buyerName;
+        document.getElementById('orderNumber').value = purchase.orderNumber;
+        // 设置订单日期，如果没有则使用创建日期或今天
+        const orderDate = purchase.orderDate || purchase.createdAt?.split('T')[0] || new Date().toISOString().split('T')[0];
+        document.getElementById('orderDate').value = orderDate;
+        document.getElementById('paidInFull').checked = purchase.paidInFull || false;
+        document.getElementById('shipped').checked = purchase.shipped || false;
+        
+        // 加载采购项（兼容旧数据格式）
+        if (purchase.purchaseItems && purchase.purchaseItems.length > 0) {
+            purchase.purchaseItems.forEach(purchaseItem => {
+                addPurchaseItemGroup(purchaseItem);
+            });
+        } else if (purchase.items && purchase.suppliers) {
+            // 兼容旧数据：将items和suppliers转换为purchaseItems
+            const suppliers = purchase.suppliers.filter(s => s);
+            if (suppliers.length > 0) {
+                // 如果有多个采购商，尝试分配物品（简单处理：平均分配）
+                const itemsPerSupplier = Math.ceil(purchase.items.length / suppliers.length);
+                suppliers.forEach((supplier, idx) => {
+                    const startIdx = idx * itemsPerSupplier;
+                    const endIdx = Math.min(startIdx + itemsPerSupplier, purchase.items.length);
+                    const items = purchase.items.slice(startIdx, endIdx);
+                    addPurchaseItemGroup({ supplier, items });
+                });
+            } else {
+                // 只有物品，没有采购商（旧数据）
+                addPurchaseItemGroup({ supplier: '', items: purchase.items });
+            }
+        } else {
+            addPurchaseItemGroup();
+        }
+    } else {
+        // 添加模式（采购项改为非必填，不自动添加）
+        modalTitle.textContent = '添加采购记录';
+        form.reset();
+        // 设置默认订单日期为今天
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('orderDate').value = today;
+        // 不再自动添加采购项，用户可以选择性添加
+    }
+    modal.style.display = 'block';
+}
+
+// 关闭模态框
+function closeModal() {
+    modal.style.display = 'none';
+    form.reset();
+    purchaseItemsContainer.innerHTML = '';
+    editingIndex = -1;
+}
+
+// 处理表单提交
+function handleSubmit(e) {
+    e.preventDefault();
+    
+    const buyerName = document.getElementById('buyerName').value.trim();
+    const orderNumber = document.getElementById('orderNumber').value.trim();
+    const orderDate = document.getElementById('orderDate').value;
+    const paidInFull = document.getElementById('paidInFull').checked;
+    const shipped = document.getElementById('shipped').checked;
+    
+    // 获取所有采购项
+    const purchaseItemGroups = purchaseItemsContainer.querySelectorAll('.purchase-item-group');
+    const purchaseItems = [];
+    const suppliers = [];
+    
+    purchaseItemGroups.forEach(group => {
+        const supplierInput = group.querySelector('.supplier-input');
+        const supplier = supplierInput.value.trim();
+        
+        if (!supplier) {
+            return; // 跳过没有采购商的项
+        }
+        
+        const itemInputs = group.querySelectorAll('.items-container input');
+        const items = Array.from(itemInputs)
+            .map(input => input.value.trim())
+            .filter(item => item.length > 0);
+        
+        if (items.length > 0) {
+            purchaseItems.push({ supplier, items });
+            if (!suppliers.includes(supplier)) {
+                suppliers.push(supplier);
+            }
+        }
+    });
+    
+    // 验证必填字段（采购项改为非必填）
+    if (!buyerName || !orderNumber || !orderDate) {
+        alert('请填写客户姓名、订单号和订单日期！');
+        return;
+    }
+    
+    // 订单号允许重复，不再进行唯一性验证
+    
+    // 生成唯一ID（用于Firebase存储）
+    const uniqueId = editingIndex >= 0 && purchases[editingIndex].id 
+        ? purchases[editingIndex].id 
+        : Date.now().toString(36) + Math.random().toString(36).substr(2);
+    
+    const purchaseData = {
+        id: uniqueId, // 添加唯一ID用于Firebase存储
+        buyerName,
+        orderNumber,
+        orderDate,
+        suppliers, // 保留suppliers字段以兼容旧代码
+        purchaseItems,
+        paidInFull,
+        shipped,
+        createdAt: editingIndex >= 0 ? purchases[editingIndex].createdAt : new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+    };
+    
+    if (editingIndex >= 0) {
+        // 更新现有记录
+        const oldPurchase = purchases[editingIndex];
+        purchases[editingIndex] = purchaseData;
+        
+        // 如果使用Firebase且旧记录有ID，需要从Firebase删除旧记录（使用ID而不是订单号）
+        if (isFirebaseConfigured && oldPurchase.id) {
+            const oldRef = database.ref(`purchases/${oldPurchase.id}`);
+            oldRef.remove().catch(err => console.error('删除旧记录失败:', err));
+        }
+    } else {
+        // 添加新记录到数组开头（最新的在前）
+        purchases.unshift(purchaseData);
+    }
+    
+    // 重新排序（按订单日期倒序，最新的在前）
+    purchases.sort((a, b) => {
+        const dateA = new Date(a.orderDate || a.createdAt || a.updatedAt || 0).getTime();
+        const dateB = new Date(b.orderDate || b.createdAt || b.updatedAt || 0).getTime();
+        return dateB - dateA; // 倒序：最新日期在前
+    });
+    
+    saveData();
+    filteredPurchases = [...purchases];
+    renderTable();
+    closeModal();
+}
+
+// 编辑记录
+function editPurchase(index) {
+    openModal(index);
+}
+
+// 删除记录
+function deletePurchase(index) {
+    if (confirm('确定要删除这条采购记录吗？')) {
+        // index是当前页的索引，需要转换为filteredPurchases中的实际索引
+        const actualIndex = (currentPage - 1) * itemsPerPage + index;
+        const purchaseToDelete = filteredPurchases[actualIndex];
+        
+        // 在purchases中找到并删除对应的记录（使用ID或索引匹配）
+        let purchaseIndex = -1;
+        if (purchaseToDelete.id) {
+            purchaseIndex = purchases.findIndex(p => p.id === purchaseToDelete.id);
+        } else {
+            // 兼容旧数据：使用订单号和创建时间匹配，或者直接使用索引
+            purchaseIndex = purchases.findIndex(p => 
+                p.orderNumber === purchaseToDelete.orderNumber &&
+                p.createdAt === purchaseToDelete.createdAt
+            );
+            // 如果还是找不到，使用实际索引
+            if (purchaseIndex === -1) {
+                purchaseIndex = actualIndex;
+            }
+        }
+        
+        if (purchaseIndex >= 0) {
+            purchases.splice(purchaseIndex, 1);
+            
+            // 重新排序（按订单日期倒序，最新的在前）
+            purchases.sort((a, b) => {
+                const dateA = new Date(a.orderDate || a.createdAt || a.updatedAt || 0).getTime();
+                const dateB = new Date(b.orderDate || b.createdAt || b.updatedAt || 0).getTime();
+                return dateB - dateA; // 倒序：最新日期在前
+            });
+            
+            saveData();
+            filteredPurchases = [...purchases];
+            
+            // 如果当前页没有数据了，回到上一页
+            const totalPages = Math.ceil(filteredPurchases.length / itemsPerPage);
+            if (currentPage > totalPages && totalPages > 0) {
+                currentPage = totalPages;
+            }
+            
+            renderTable();
+        }
+    }
+}
+
+// 渲染表格
+function renderTable() {
+    // 如果没有数据，初始化filteredPurchases
+    if (filteredPurchases.length === 0 && purchases.length > 0) {
+        filteredPurchases = [...purchases];
+    }
+    
+    // 如果没有数据，显示空状态
+    if (filteredPurchases.length === 0) {
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="9" class="empty-state">
+                    <p>暂无采购记录</p>
+                    <p style="font-size: 14px; margin-top: 8px;">点击"添加采购记录"按钮开始添加</p>
+                </td>
+            </tr>
+        `;
+        pagination.style.display = 'none';
+        return;
+    }
+    
+    // 计算分页
+    const totalPages = Math.ceil(filteredPurchases.length / itemsPerPage);
+    
+    // 确保当前页在有效范围内
+    if (currentPage > totalPages && totalPages > 0) {
+        currentPage = totalPages;
+    } else if (currentPage < 1) {
+        currentPage = 1;
+    }
+    
+    // 获取当前页的数据
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = Math.min(startIndex + itemsPerPage, filteredPurchases.length);
+    const currentPageData = filteredPurchases.slice(startIndex, endIndex);
+    
+    // 渲染当前页数据
+    tableBody.innerHTML = currentPageData.map((purchase, index) => {
+        const actualIndex = startIndex + index;
+        // 获取所有采购商（兼容旧数据）
+        const suppliers = purchase.suppliers || (purchase.purchaseItems ? purchase.purchaseItems.map(pi => pi.supplier) : []);
+        const suppliersHtml = [...new Set(suppliers)].map(s => 
+            `<span class="supplier-tag">${s}</span>`
+        ).join('');
+        
+        // 显示采购项（采购商-物品对应关系）
+        let itemsHtml = '';
+        if (purchase.purchaseItems && purchase.purchaseItems.length > 0) {
+            itemsHtml = purchase.purchaseItems.map(pi => {
+                const itemsTags = pi.items.map(item => 
+                    `<span class="item-tag">${item}</span>`
+                ).join('');
+                return `
+                    <div class="purchase-item-display">
+                        <div class="supplier-name-display">${pi.supplier}:</div>
+                        <div class="item-list">${itemsTags}</div>
+                    </div>
+                `;
+            }).join('');
+        } else if (purchase.items) {
+            // 兼容旧数据
+            const itemsTags = purchase.items.map(item => 
+                `<span class="item-tag">${item}</span>`
+            ).join('');
+            itemsHtml = `<div class="item-list">${itemsTags}</div>`;
+        } else {
+            itemsHtml = '<span style="color: #6c757d;">暂无</span>';
+        }
+        
+        const paidStatusClass = purchase.paidInFull ? 'status-paid' : 'status-unpaid';
+        const paidStatusText = purchase.paidInFull ? '已付清' : '未付清';
+        
+        const shippedStatusClass = purchase.shipped ? 'status-shipped' : 'status-not-shipped';
+        const shippedStatusText = purchase.shipped ? '已发货' : '未发货';
+        
+        // 格式化订单日期
+        const orderDate = purchase.orderDate || purchase.createdAt?.split('T')[0] || '';
+        const formattedDate = orderDate ? new Date(orderDate).toLocaleDateString('zh-CN') : '未设置';
+        
+        return `
+            <tr>
+                <td>${actualIndex + 1}</td>
+                <td>${formattedDate}</td>
+                <td>${purchase.buyerName}</td>
+                <td>${purchase.orderNumber}</td>
+                <td>
+                    <div class="supplier-list">
+                        ${suppliersHtml || '<span style="color: #6c757d;">暂无</span>'}
+                    </div>
+                </td>
+                <td>
+                    ${itemsHtml}
+                </td>
+                <td>
+                    <span class="status-badge ${paidStatusClass}">${paidStatusText}</span>
+                </td>
+                <td>
+                    <span class="status-badge ${shippedStatusClass}">${shippedStatusText}</span>
+                </td>
+                <td>
+                    <button class="btn btn-edit" onclick="editPurchase(${actualIndex})">编辑</button>
+                    <button class="btn btn-delete" onclick="deletePurchase(${index})">删除</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+    
+    // 更新分页信息
+    updatePagination(totalPages, startIndex + 1, endIndex, filteredPurchases.length);
+}
+
+// 更新分页控件
+function updatePagination(totalPages, startItem, endItem, totalItems) {
+    if (totalPages <= 1) {
+        pagination.style.display = 'none';
+        return;
+    }
+    
+    pagination.style.display = 'flex';
+    
+    // 更新分页信息
+    pageInfo.textContent = `显示第 ${startItem}-${endItem} 条，共 ${totalItems} 条`;
+    
+    // 更新按钮状态
+    firstPageBtn.disabled = currentPage === 1;
+    prevPageBtn.disabled = currentPage === 1;
+    nextPageBtn.disabled = currentPage === totalPages;
+    lastPageBtn.disabled = currentPage === totalPages;
+    
+    // 生成页码按钮
+    let pageNumbersHtml = '';
+    const maxVisiblePages = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    
+    if (endPage - startPage < maxVisiblePages - 1) {
+        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+    
+    if (startPage > 1) {
+        pageNumbersHtml += `<button class="btn btn-page" onclick="goToPage(1)">1</button>`;
+        if (startPage > 2) {
+            pageNumbersHtml += `<span class="page-ellipsis">...</span>`;
+        }
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        if (i === currentPage) {
+            pageNumbersHtml += `<button class="btn btn-page btn-page-active" onclick="goToPage(${i})">${i}</button>`;
+        } else {
+            pageNumbersHtml += `<button class="btn btn-page" onclick="goToPage(${i})">${i}</button>`;
+        }
+    }
+    
+    if (endPage < totalPages) {
+        if (endPage < totalPages - 1) {
+            pageNumbersHtml += `<span class="page-ellipsis">...</span>`;
+        }
+        pageNumbersHtml += `<button class="btn btn-page" onclick="goToPage(${totalPages})">${totalPages}</button>`;
+    }
+    
+    pageNumbers.innerHTML = pageNumbersHtml;
+}
+
+// 跳转到指定页
+function goToPage(page) {
+    const totalPages = Math.ceil(filteredPurchases.length / itemsPerPage);
+    if (page < 1 || page > totalPages) {
+        return;
+    }
+    currentPage = page;
+    renderTable();
+    // 滚动到表格顶部
+    document.querySelector('.table-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// 执行搜索
+function performSearch() {
+    const searchTerm = searchInput.value.trim().toLowerCase();
+    
+    if (!searchTerm) {
+        alert('请输入订单号或客户姓名进行搜索！');
+        return;
+    }
+    
+    // 增强模糊搜索：搜索订单号、客户姓名、采购商、物品等
+    const results = purchases.filter(purchase => {
+        const orderNumber = (purchase.orderNumber || '').toLowerCase();
+        const buyerName = (purchase.buyerName || '').toLowerCase();
+        
+        // 搜索采购商
+        const suppliers = purchase.suppliers || (purchase.purchaseItems ? purchase.purchaseItems.map(pi => pi.supplier) : []);
+        const suppliersStr = suppliers.join(' ').toLowerCase();
+        
+        // 搜索物品
+        let itemsStr = '';
+        if (purchase.purchaseItems && purchase.purchaseItems.length > 0) {
+            itemsStr = purchase.purchaseItems.map(pi => pi.items.join(' ')).join(' ').toLowerCase();
+        } else if (purchase.items) {
+            itemsStr = purchase.items.join(' ').toLowerCase();
+        }
+        
+        return orderNumber.includes(searchTerm) ||
+               buyerName.includes(searchTerm) ||
+               suppliersStr.includes(searchTerm) ||
+               itemsStr.includes(searchTerm);
+    });
+    
+    // 更新过滤后的数据并重置到第一页
+    filteredPurchases = results;
+    currentPage = 1;
+    
+    if (results.length === 0) {
+        searchResultsContent.innerHTML = `
+            <div class="empty-state">
+                <p>未找到匹配的订单</p>
+            </div>
+        `;
+        searchResults.style.display = 'block';
+        return;
+    }
+    
+    // 渲染搜索结果
+    searchResultsContent.innerHTML = results.map(purchase => {
+        // 获取所有采购商（兼容旧数据）
+        const suppliers = purchase.suppliers || (purchase.purchaseItems ? purchase.purchaseItems.map(pi => pi.supplier) : []);
+        const suppliersHtml = [...new Set(suppliers)].map(s => 
+            `<span class="supplier-tag">${s}</span>`
+        ).join('');
+        
+        // 格式化订单日期
+        const orderDate = purchase.orderDate || purchase.createdAt?.split('T')[0] || '';
+        const formattedDate = orderDate ? new Date(orderDate).toLocaleDateString('zh-CN') : '未设置';
+        
+        const paidStatusClass = purchase.paidInFull ? 'status-paid' : 'status-unpaid';
+        const paidStatusText = purchase.paidInFull ? '已付清' : '未付清';
+        
+        const shippedStatusClass = purchase.shipped ? 'status-shipped' : 'status-not-shipped';
+        const shippedStatusText = purchase.shipped ? '已发货' : '未发货';
+        
+        // 综合状态：已付清且已发货 = 已完成，否则 = 待处理
+        const isComplete = purchase.paidInFull && purchase.shipped;
+        const overallStatusClass = isComplete ? 'status-complete' : 'status-pending';
+        const overallStatusText = isComplete ? '✓ 已完成' : '⚠ 待处理';
+        
+        // 显示采购项（采购商-物品对应关系）
+        let itemsHtml = '';
+        if (purchase.purchaseItems && purchase.purchaseItems.length > 0) {
+            itemsHtml = purchase.purchaseItems.map(pi => {
+                const itemsTags = pi.items.map(item => 
+                    `<span class="item-tag">${item}</span>`
+                ).join('');
+                return `
+                    <div class="purchase-item-display" style="margin-bottom: 8px;">
+                        <div class="supplier-name-display">${pi.supplier}:</div>
+                        <div class="item-list" style="margin-top: 4px;">${itemsTags}</div>
+                    </div>
+                `;
+            }).join('');
+        } else if (purchase.items) {
+            // 兼容旧数据
+            const itemsTags = purchase.items.map(item => 
+                `<span class="item-tag">${item}</span>`
+            ).join('');
+            itemsHtml = `<div class="item-list">${itemsTags}</div>`;
+        } else {
+            itemsHtml = '<span style="color: #6c757d;">暂无</span>';
+        }
+        
+        return `
+            <div class="search-result-item">
+                <h4>订单号：${purchase.orderNumber}</h4>
+                <div class="search-result-info">
+                    <div><strong>订单日期：</strong>${formattedDate}</div>
+                    <div><strong>客户姓名：</strong>${purchase.buyerName}</div>
+                    <div><strong>采购商姓名：</strong>${suppliers.length > 0 ? suppliers.join('、') : '暂无'}</div>
+                    <div style="grid-column: 1 / -1;"><strong>采购物品：</strong>
+                        <div style="margin-top: 8px;">
+                            ${itemsHtml}
+                        </div>
+                    </div>
+                </div>
+                <div class="search-status-group">
+                    <span class="status-badge ${paidStatusClass}">尾款：${paidStatusText}</span>
+                    <span class="status-badge ${shippedStatusClass}">发货：${shippedStatusText}</span>
+                    <span class="status-badge ${overallStatusClass}">${overallStatusText}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    searchResults.style.display = 'block';
+}
+
+// 清除搜索
+function clearSearch() {
+    searchInput.value = '';
+    searchResults.style.display = 'none';
+    searchResultsContent.innerHTML = '';
+    filteredPurchases = [...purchases];
+    currentPage = 1;
+    renderTable();
+}
