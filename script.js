@@ -87,11 +87,13 @@ const modalHeader = document.querySelector('.modal-header');
 const exportBtn = document.getElementById('exportBtn');
 const importBtn = document.getElementById('importBtn');
 const importFileInput = document.getElementById('importFileInput');
-const loginOverlay = document.getElementById('loginOverlay');
-const loginForm = document.getElementById('loginForm');
-const loginUsernameInput = document.getElementById('loginUsername');
-const loginPasswordInput = document.getElementById('loginPassword');
-const loginError = document.getElementById('loginError');
+// 登录相关DOM元素将在initLogin中获取，确保DOM已加载
+let loginOverlay = null;
+let loginForm = null;
+let loginUsernameInput = null;
+let loginPasswordInput = null;
+let loginError = null;
+let loginSuccess = null;
 
 // 拖动相关变量
 let isDragging = false;
@@ -109,8 +111,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // 登录初始化
 function initLogin() {
+    // 获取登录相关DOM元素
+    loginOverlay = document.getElementById('loginOverlay');
+    loginForm = document.getElementById('loginForm');
+    loginUsernameInput = document.getElementById('loginUsername');
+    loginPasswordInput = document.getElementById('loginPassword');
+    loginError = document.getElementById('loginError');
+    loginSuccess = document.getElementById('loginSuccess');
+    
+    // 检查元素是否存在
+    if (!loginOverlay || !loginForm || !loginUsernameInput || !loginPasswordInput || !loginError) {
+        console.error('登录相关DOM元素未找到');
+        return;
+    }
+    
     // 已登录则直接进入
     if (localStorage.getItem('loggedIn') === 'true') {
+        // 确保登录弹框隐藏
+        if (loginOverlay) {
+            loginOverlay.style.display = 'none';
+        }
         startApp();
         return;
     }
@@ -121,23 +141,59 @@ function initLogin() {
         handleLogin();
     });
     
+    // 确保登录弹框显示
     loginOverlay.style.display = 'flex';
 }
 
 // 处理登录
 function handleLogin() {
+    // 确保DOM元素已获取
+    if (!loginUsernameInput || !loginPasswordInput || !loginError || !loginOverlay) {
+        console.error('登录相关DOM元素未初始化');
+        return;
+    }
+    
     const username = loginUsernameInput.value.trim();
     const password = loginPasswordInput.value.trim();
+    
+    // 验证输入是否为空
+    if (!username || !password) {
+        loginError.textContent = '请输入账号和密码';
+        loginError.style.display = 'block';
+        if (loginSuccess) loginSuccess.style.display = 'none';
+        return;
+    }
     
     const isValid = username === 'lwj1215' && password === '1215lwj1215';
     
     if (isValid) {
-        localStorage.setItem('loggedIn', 'true');
+        // 显示成功提示
+        if (loginSuccess) {
+            loginSuccess.style.display = 'block';
+        }
         loginError.style.display = 'none';
-        loginOverlay.style.display = 'none';
-        startApp();
+        
+        // 保存登录状态
+        localStorage.setItem('loggedIn', 'true');
+        
+        // 延迟隐藏弹框，让用户看到成功提示
+        setTimeout(() => {
+            // 强制隐藏登录弹框
+            if (loginOverlay) {
+                loginOverlay.style.display = 'none';
+                // 使用CSS类来确保隐藏
+                loginOverlay.classList.add('hidden');
+            }
+            // 启动应用
+            startApp();
+        }, 500);
     } else {
+        // 显示错误提示
+        loginError.textContent = '账号或密码错误';
         loginError.style.display = 'block';
+        if (loginSuccess) loginSuccess.style.display = 'none';
+        // 清空密码框
+        loginPasswordInput.value = '';
     }
 }
 
