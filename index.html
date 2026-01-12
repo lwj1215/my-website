@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>采购管理系统</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>采购管理系统</h1>
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <span id="syncStatus" class="sync-status" style="display: none;">
+                    <span class="sync-indicator"></span>
+                    <span id="syncStatusText">云端同步</span>
+                </span>
+                <button class="btn btn-primary" id="addBtn">添加采购记录</button>
+            </div>
+        </header>
+
+        <div class="search-container">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="搜索订单号或客户姓名..." />
+                <button class="btn btn-search" id="searchBtn">搜索</button>
+                <button class="btn btn-clear" id="clearBtn">清除</button>
+            </div>
+        </div>
+
+        <div id="searchResults" class="search-results" style="display: none;">
+            <h3>搜索结果</h3>
+            <div id="searchResultsContent"></div>
+        </div>
+
+        <div class="table-container">
+            <table id="purchaseTable">
+                <thead>
+                    <tr>
+                        <th>序号</th>
+                        <th>订单日期</th>
+                        <th>客户姓名</th>
+                        <th>订单号</th>
+                        <th>采购商姓名</th>
+                        <th>采购物品</th>
+                        <th>是否已付清尾款</th>
+                        <th>是否已发货</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <!-- 数据将通过JavaScript动态加载 -->
+                </tbody>
+            </table>
+            
+            <!-- 分页控件 -->
+            <div id="pagination" class="pagination" style="display: none;">
+                <div class="pagination-info">
+                    <span id="pageInfo">显示第 0-0 条，共 0 条</span>
+                </div>
+                <div class="pagination-controls">
+                    <button class="btn btn-pagination" id="firstPageBtn">首页</button>
+                    <button class="btn btn-pagination" id="prevPageBtn">上一页</button>
+                    <span class="page-numbers" id="pageNumbers"></span>
+                    <button class="btn btn-pagination" id="nextPageBtn">下一页</button>
+                    <button class="btn btn-pagination" id="lastPageBtn">末页</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加/编辑模态框 -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">添加采购记录</h2>
+                <span class="close">&times;</span>
+            </div>
+            <form id="purchaseForm">
+                <div class="form-group">
+                    <label for="buyerName">客户姓名 <span class="required">*</span></label>
+                    <input type="text" id="buyerName" name="buyerName" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="orderNumber">订单号 <span class="required">*</span></label>
+                    <input type="text" id="orderNumber" name="orderNumber" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="orderDate">订单日期 <span class="required">*</span></label>
+                    <input type="date" id="orderDate" name="orderDate" required>
+                </div>
+
+                <div class="form-group">
+                    <label>采购项</label>
+                    <div id="purchaseItemsContainer" class="purchase-items-container">
+                        <!-- 采购项组将动态添加 -->
+                    </div>
+                    <button type="button" class="btn btn-add-purchase-item" id="addPurchaseItemBtn">+ 添加采购项</button>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="paidInFull" name="paidInFull">
+                        <span>已付清尾款</span>
+                    </label>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="shipped" name="shipped">
+                        <span>已发货</span>
+                    </label>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelBtn">取消</button>
+                    <button type="submit" class="btn btn-primary">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
