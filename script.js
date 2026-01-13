@@ -10,9 +10,9 @@ let filteredPurchases = []; // 用于存储过滤后的数据（搜索时使用�
 // Firebase配置
 const firebaseConfig = {
     // 这里需要用户配置自己的Firebase项目信息
-    apiKey: "AIzaSyDaVI4B_vXCg9uf9fZL-oSUudj8xvhaws4",
-    authDomain: "caigouweb.firebaseapp.com",
-    databaseURL: "https://caigouweb-default-rtdb.europe-west1.firebasedatabase.app",
+   apiKey: "AIzaSyDaVI4B_vXCg9uf9fZL-oSUudj8xvhaws4",
+    authDomain: " caigouweb.firebaseapp.com ",
+    databaseURL: " https://caigouweb-default-rtdb.europe-west1.firebasedatabase.app ",
     projectId: "caigouweb",
     storageBucket: "caigouweb.firebasestorage.app",
     messagingSenderId: "884397514172",
@@ -516,10 +516,16 @@ function openModal(index = -1) {
     // 清空采购项容器
     purchaseItemsContainer.innerHTML = '';
     
-    if (index >= 0) {
+    if (index >= 0 && index < purchases.length) {
         // 编辑模式
         modalTitle.textContent = '编辑采购记录';
         const purchase = purchases[index];
+        
+        if (!purchase) {
+            console.error('找不到要编辑的记录，索引:', index);
+            alert('找不到要编辑的记录，请刷新页面后重试');
+            return;
+        }
         document.getElementById('buyerName').value = purchase.buyerName;
         document.getElementById('orderNumber').value = purchase.orderNumber;
         // 设置订单日期，如果没有则使用创建日期或今天
@@ -634,10 +640,30 @@ function handleSubmit(e) {
         updatedAt: new Date().toISOString()
     };
     
-    if (editingIndex >= 0) {
+    if (editingIndex >= 0 && editingIndex < purchases.length) {
         // 更新现有记录
         const oldPurchase = purchases[editingIndex];
-        purchases[editingIndex] = purchaseData;
+        
+        if (!oldPurchase) {
+            console.error('编辑索引无效:', editingIndex);
+            alert('编辑失败：找不到要编辑的记录，请刷新页面后重试');
+            return;
+        }
+        
+        // 使用ID来查找和更新记录，而不是依赖索引（因为排序后索引会变化）
+        if (oldPurchase.id) {
+            // 通过ID查找记录位置
+            const recordIndex = purchases.findIndex(p => p.id === oldPurchase.id);
+            if (recordIndex >= 0) {
+                purchases[recordIndex] = purchaseData;
+            } else {
+                // 如果找不到，使用原索引
+                purchases[editingIndex] = purchaseData;
+            }
+        } else {
+            // 没有ID的旧记录，直接使用索引更新
+            purchases[editingIndex] = purchaseData;
+        }
         
         // 如果使用Firebase且旧记录有ID，需要从Firebase删除旧记录（使用ID而不是订单号）
         if (isFirebaseConfigured && oldPurchase.id) {
@@ -663,8 +689,44 @@ function handleSubmit(e) {
 }
 
 // 编辑记录
-function editPurchase(index) {
-    openModal(index);
+function editPurchase(idOrIndex) {
+    let purchaseIndex = -1;
+    let purchaseToEdit = null;
+    
+    // 如果传入的是ID（字符串），通过ID查找
+    if (typeof idOrIndex === 'string' && idOrIndex) {
+        purchaseIndex = purchases.findIndex(p => p.id === idOrIndex);
+        if (purchaseIndex >= 0) {
+            purchaseToEdit = purchases[purchaseIndex];
+        }
+    } else {
+        // 兼容旧代码：如果传入的是数字索引（filteredPurchases的索引）
+        const actualIndex = typeof idOrIndex === 'number' ? idOrIndex : parseInt(idOrIndex);
+        if (actualIndex >= 0 && actualIndex < filteredPurchases.length) {
+            purchaseToEdit = filteredPurchases[actualIndex];
+            
+            if (purchaseToEdit) {
+                // 使用 ID 或订单号+创建时间在 purchases 数组中查找实际索引
+                if (purchaseToEdit.id) {
+                    purchaseIndex = purchases.findIndex(p => p.id === purchaseToEdit.id);
+                } else {
+                    // 兼容旧数据：使用订单号和创建时间匹配
+                    purchaseIndex = purchases.findIndex(p => 
+                        p.orderNumber === purchaseToEdit.orderNumber &&
+                        p.createdAt === purchaseToEdit.createdAt
+                    );
+                }
+            }
+        }
+    }
+    
+    if (purchaseIndex === -1 || !purchaseToEdit) {
+        console.error('找不到要编辑的记录，ID/索引:', idOrIndex);
+        alert('找不到要编辑的记录，请刷新页面后重试');
+        return;
+    }
+    
+    openModal(purchaseIndex);
 }
 
 // 删除记录
@@ -814,7 +876,7 @@ function renderTable() {
                     <span class="status-badge ${shippedStatusClass}">${shippedStatusText}</span>
                 </td>
                 <td>
-                    <button class="btn btn-edit" onclick="editPurchase(${actualIndex})">编辑</button>
+                    <button class="btn btn-edit" onclick="editPurchase('${purchase.id || actualIndex}')">编辑</button>
                     <button class="btn btn-delete" onclick="deletePurchase(${index})">删除</button>
                 </td>
             </tr>
