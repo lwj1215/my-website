@@ -356,12 +356,29 @@ function dragEnd(e) {
     document.removeEventListener('mouseup', dragEnd);
 }
 
+// Firebase监听器引用，用于在需要时取消监听
+let firebaseListener = null;
+let isSavingToFirebase = false; // 标记是否正在保存到Firebase
+
 // 加载数据
 function loadData() {
     if (isFirebaseConfigured) {
         // 从Firebase加载数据（使用订单号作为key）
         const purchasesRef = database.ref('purchases');
-        purchasesRef.on('value', (snapshot) => {
+        
+        // 如果已有监听器，先取消
+        if (firebaseListener) {
+            purchasesRef.off('value', firebaseListener);
+        }
+        
+        // 设置新的监听器
+        firebaseListener = (snapshot) => {
+            // 如果正在保存到Firebase，忽略这次更新（避免覆盖本地修改）
+            if (isSavingToFirebase) {
+                console.log('正在保存到Firebase，忽略监听器更新');
+                return;
+            }
+            
             const data = snapshot.val();
             if (data) {
                 // 将对象转换为数组并按订单日期倒序排列（最新的在前）
@@ -378,7 +395,9 @@ function loadData() {
                 filteredPurchases = [];
                 renderTable();
             }
-        }, (error) => {
+        };
+        
+        purchasesRef.on('value', firebaseListener, (error) => {
             console.error('加载数据失败:', error);
             updateSyncStatus(false);
             // Firebase加载失败时，尝试从本地存储加载
@@ -420,19 +439,33 @@ function loadDataFromLocal() {
 // 保存数据
 function saveData() {
     if (isFirebaseConfigured) {
+        // 标记正在保存到Firebase，避免监听器覆盖数据
+        isSavingToFirebase = true;
+        
         // 保存到Firebase（使用唯一ID作为key，支持订单号重复）
         const purchasesRef = database.ref('purchases');
         const purchasesObj = {};
+        
+        // 确保所有记录都有ID
         purchases.forEach((purchase) => {
             // 如果没有ID，生成一个
             const id = purchase.id || Date.now().toString(36) + Math.random().toString(36).substr(2);
             purchase.id = id;
             purchasesObj[id] = purchase;
         });
+        
+        console.log('准备保存到Firebase，记录数量:', purchases.length);
+        console.log('保存的数据:', purchasesObj);
+        
         purchasesRef.set(purchasesObj).then(() => {
-            console.log('数据已保存到云端');
+            console.log('数据已保存到云端，记录数量:', purchases.length);
+            // 保存成功后，延迟取消标记，确保数据已同步
+            setTimeout(() => {
+                isSavingToFirebase = false;
+            }, 500);
         }).catch((error) => {
             console.error('保存数据失败:', error);
+            isSavingToFirebase = false;
             alert('保存数据失败，请检查网络连接');
             updateSyncStatus(false);
             // Firebase保存失败时，保存到本地存储作为备份
