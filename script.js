@@ -47,6 +47,7 @@ function initFirebase() {
 
 // 更新同步状态显示
 function updateSyncStatus(isConnected) {
+    if (!syncStatus) return;
     if (isConnected) {
         syncStatus.style.display = 'flex';
         syncStatusText.textContent = '云端同步';
@@ -130,6 +131,7 @@ function initLogin() {
         // 确保登录弹框隐藏
         if (loginOverlay) {
             loginOverlay.style.display = 'none';
+            loginOverlay.classList.add('hidden');
         }
         startApp();
         return;
@@ -143,6 +145,7 @@ function initLogin() {
     
     // 确保登录弹框显示
     loginOverlay.style.display = 'flex';
+    loginOverlay.classList.remove('hidden');
 }
 
 // 处理登录
@@ -170,6 +173,7 @@ function handleLogin() {
         // 显示成功提示
         if (loginSuccess) {
             loginSuccess.style.display = 'block';
+            loginSuccess.textContent = '登录成功！正在进入系统...';
         }
         loginError.style.display = 'none';
         
@@ -181,12 +185,11 @@ function handleLogin() {
             // 强制隐藏登录弹框
             if (loginOverlay) {
                 loginOverlay.style.display = 'none';
-                // 使用CSS类来确保隐藏
                 loginOverlay.classList.add('hidden');
             }
             // 启动应用
             startApp();
-        }, 500);
+        }, 800);
     } else {
         // 显示错误提示
         loginError.textContent = '账号或密码错误';
@@ -378,11 +381,20 @@ function loadData() {
         }, (error) => {
             console.error('加载数据失败:', error);
             updateSyncStatus(false);
+            // Firebase加载失败时，尝试从本地存储加载
+            loadDataFromLocal();
         });
     } else {
         // 从本地存储加载数据
-        const saved = localStorage.getItem('purchases');
-        if (saved) {
+        loadDataFromLocal();
+    }
+}
+
+// 从本地存储加载数据
+function loadDataFromLocal() {
+    const saved = localStorage.getItem('purchases');
+    if (saved) {
+        try {
             purchases = JSON.parse(saved);
             // 按订单日期倒序排列（最新的在前）
             purchases.sort((a, b) => {
@@ -390,7 +402,18 @@ function loadData() {
                 const dateB = new Date(b.orderDate || b.createdAt || b.updatedAt || 0).getTime();
                 return dateB - dateA; // 倒序：最新日期在前
             });
+            filteredPurchases = [...purchases];
+            renderTable();
+        } catch (error) {
+            console.error('解析本地数据失败:', error);
+            purchases = [];
+            filteredPurchases = [];
+            renderTable();
         }
+    } else {
+        purchases = [];
+        filteredPurchases = [];
+        renderTable();
     }
 }
 
@@ -412,10 +435,23 @@ function saveData() {
             console.error('保存数据失败:', error);
             alert('保存数据失败，请检查网络连接');
             updateSyncStatus(false);
+            // Firebase保存失败时，保存到本地存储作为备份
+            saveDataToLocal();
         });
     } else {
         // 保存到本地存储
+        saveDataToLocal();
+    }
+}
+
+// 保存数据到本地存储
+function saveDataToLocal() {
+    try {
         localStorage.setItem('purchases', JSON.stringify(purchases));
+        console.log('数据已保存到本地存储');
+    } catch (error) {
+        console.error('保存到本地存储失败:', error);
+        alert('保存数据失败，可能是存储空间不足');
     }
 }
 
@@ -526,6 +562,7 @@ function openModal(index = -1) {
             alert('找不到要编辑的记录，请刷新页面后重试');
             return;
         }
+        
         document.getElementById('buyerName').value = purchase.buyerName;
         document.getElementById('orderNumber').value = purchase.orderNumber;
         // 设置订单日期，如果没有则使用创建日期或今天
@@ -623,7 +660,7 @@ function handleSubmit(e) {
     // 订单号允许重复，不再进行唯一性验证
     
     // 生成唯一ID（用于Firebase存储）
-    const uniqueId = editingIndex >= 0 && purchases[editingIndex].id 
+    const uniqueId = editingIndex >= 0 && purchases[editingIndex] && purchases[editingIndex].id 
         ? purchases[editingIndex].id 
         : Date.now().toString(36) + Math.random().toString(36).substr(2);
     
@@ -636,7 +673,7 @@ function handleSubmit(e) {
         purchaseItems,
         paidInFull,
         shipped,
-        createdAt: editingIndex >= 0 ? purchases[editingIndex].createdAt : new Date().toISOString(),
+        createdAt: editingIndex >= 0 && purchases[editingIndex] ? purchases[editingIndex].createdAt : new Date().toISOString(),
         updatedAt: new Date().toISOString()
     };
     
@@ -682,10 +719,14 @@ function handleSubmit(e) {
         return dateB - dateA; // 倒序：最新日期在前
     });
     
+    // 保存数据
     saveData();
     filteredPurchases = [...purchases];
     renderTable();
     closeModal();
+    
+    // 显示保存成功提示
+    alert('保存成功！');
 }
 
 // 编辑记录
