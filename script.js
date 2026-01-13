@@ -11,8 +11,8 @@ let filteredPurchases = []; // 用于存储过滤后的数据（搜索时使用�
 const firebaseConfig = {
     // 这里需要用户配置自己的Firebase项目信息
     apiKey: "AIzaSyDaVI4B_vXCg9uf9fZL-oSUudj8xvhaws4",
-    authDomain: " caigouweb.firebaseapp.com ",
-    databaseURL: " https://caigouweb-default-rtdb.europe-west1.firebasedatabase.app",
+    authDomain: "caigouweb.firebaseapp.com",
+    databaseURL: "https://caigouweb-default-rtdb.europe-west1.firebasedatabase.app",
     projectId: "caigouweb",
     storageBucket: "caigouweb.firebasestorage.app",
     messagingSenderId: "884397514172",
