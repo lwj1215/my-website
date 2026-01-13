@@ -659,52 +659,98 @@ function handleSubmit(e) {
     
     // 订单号允许重复，不再进行唯一性验证
     
+    // 获取原记录（如果是编辑模式）
+    let oldPurchase = null;
+    if (editingIndex >= 0 && editingIndex < purchases.length) {
+        oldPurchase = purchases[editingIndex];
+    }
+    
     // 生成唯一ID（用于Firebase存储）
-    const uniqueId = editingIndex >= 0 && purchases[editingIndex] && purchases[editingIndex].id 
-        ? purchases[editingIndex].id 
+    // 编辑时使用原记录的ID，新增时生成新ID
+    const uniqueId = oldPurchase && oldPurchase.id 
+        ? oldPurchase.id 
         : Date.now().toString(36) + Math.random().toString(36).substr(2);
+    
+    // 如果编辑时没有采购项，保留原记录的采购项（如果原记录有的话）
+    let finalPurchaseItems = purchaseItems;
+    let finalSuppliers = suppliers;
+    
+    // 如果是编辑模式且新的采购项为空，但原记录有采购项，保留原采购项
+    if (oldPurchase && purchaseItems.length === 0) {
+        if (oldPurchase.purchaseItems && oldPurchase.purchaseItems.length > 0) {
+            finalPurchaseItems = oldPurchase.purchaseItems;
+            finalSuppliers = oldPurchase.suppliers || [];
+        } else if (oldPurchase.items && oldPurchase.items.length > 0) {
+            // 兼容旧数据格式
+            finalPurchaseItems = oldPurchase.suppliers && oldPurchase.suppliers.length > 0
+                ? oldPurchase.suppliers.map((supplier, idx) => ({
+                    supplier: supplier,
+                    items: oldPurchase.items || []
+                }))
+                : [{ supplier: '', items: oldPurchase.items }];
+            finalSuppliers = oldPurchase.suppliers || [];
+        }
+    }
     
     const purchaseData = {
         id: uniqueId, // 添加唯一ID用于Firebase存储
         buyerName,
         orderNumber,
         orderDate,
-        suppliers, // 保留suppliers字段以兼容旧代码
-        purchaseItems,
+        suppliers: finalSuppliers, // 保留suppliers字段以兼容旧代码
+        purchaseItems: finalPurchaseItems,
         paidInFull,
         shipped,
-        createdAt: editingIndex >= 0 && purchases[editingIndex] ? purchases[editingIndex].createdAt : new Date().toISOString(),
+        createdAt: oldPurchase ? oldPurchase.createdAt : new Date().toISOString(),
         updatedAt: new Date().toISOString()
     };
     
     if (editingIndex >= 0 && editingIndex < purchases.length) {
-        // 更新现有记录
-        const oldPurchase = purchases[editingIndex];
-        
+        // 更新现有记录（oldPurchase 已在上面定义）
         if (!oldPurchase) {
             console.error('编辑索引无效:', editingIndex);
             alert('编辑失败：找不到要编辑的记录，请刷新页面后重试');
             return;
         }
         
-        // 使用ID来查找和更新记录，而不是依赖索引（因为排序后索引会变化）
-        if (oldPurchase.id) {
-            // 通过ID查找记录位置
-            const recordIndex = purchases.findIndex(p => p.id === oldPurchase.id);
-            if (recordIndex >= 0) {
-                purchases[recordIndex] = purchaseData;
-            } else {
-                // 如果找不到，使用原索引
-                purchases[editingIndex] = purchaseData;
-            }
+        // 保存旧记录的ID，确保更新时使用正确的ID
+        const recordId = oldPurchase.id || purchaseData.id;
+        purchaseData.id = recordId; // 确保使用原记录的ID
+        
+        // 在排序前先找到并更新记录（使用ID查找，不依赖索引）
+        let recordIndex = -1;
+        if (recordId) {
+            recordIndex = purchases.findIndex(p => p.id === recordId);
+        }
+        
+        // 如果通过ID找不到，尝试使用订单号和创建时间匹配
+        if (recordIndex === -1) {
+            recordIndex = purchases.findIndex(p => 
+                p.orderNumber === oldPurchase.orderNumber &&
+                p.createdAt === oldPurchase.createdAt
+            );
+        }
+        
+        // 如果还是找不到，使用原索引（但这种情况不应该发生）
+        if (recordIndex === -1) {
+            console.warn('通过ID和订单号都找不到记录，使用原索引更新');
+            recordIndex = editingIndex;
+        }
+        
+        // 确保索引有效
+        if (recordIndex >= 0 && recordIndex < purchases.length) {
+            // 找到记录，更新它
+            purchases[recordIndex] = purchaseData;
+            console.log('更新记录成功，索引:', recordIndex, 'ID:', recordId, '订单号:', purchaseData.orderNumber);
         } else {
-            // 没有ID的旧记录，直接使用索引更新
-            purchases[editingIndex] = purchaseData;
+            console.error('编辑索引无效:', recordIndex, '数组长度:', purchases.length);
+            alert('编辑失败：无法找到要更新的记录，请刷新页面后重试');
+            return;
         }
         
         // 如果使用Firebase且旧记录有ID，需要从Firebase删除旧记录（使用ID而不是订单号）
-        if (isFirebaseConfigured && oldPurchase.id) {
-            const oldRef = database.ref(`purchases/${oldPurchase.id}`);
+        if (isFirebaseConfigured && recordId) {
+            const oldRef = database.ref(`purchases/${recordId}`);
             oldRef.remove().catch(err => console.error('删除旧记录失败:', err));
         }
     } else {
