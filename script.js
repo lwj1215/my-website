@@ -10,7 +10,7 @@ let filteredPurchases = []; // 用于存储过滤后的数据（搜索时使用�
 // Firebase配置
 const firebaseConfig = {
     // 这里需要用户配置自己的Firebase项目信息
-   apiKey: "AIzaSyDaVI4B_vXCg9uf9fZL-oSUudj8xvhaws4",
+    apiKey: "AIzaSyDaVI4B_vXCg9uf9fZL-oSUudj8xvhaws4",
     authDomain: " caigouweb.firebaseapp.com ",
     databaseURL: " https://caigouweb-default-rtdb.europe-west1.firebasedatabase.app ",
     projectId: "caigouweb",
@@ -739,9 +739,10 @@ function handleSubmit(e) {
         
         // 确保索引有效
         if (recordIndex >= 0 && recordIndex < purchases.length) {
-            // 找到记录，更新它
-            purchases[recordIndex] = purchaseData;
+            // 找到记录，更新它（使用 Object.assign 确保所有字段都被正确更新）
+            Object.assign(purchases[recordIndex], purchaseData);
             console.log('更新记录成功，索引:', recordIndex, 'ID:', recordId, '订单号:', purchaseData.orderNumber);
+            console.log('更新后的记录:', purchases[recordIndex]);
         } else {
             console.error('编辑索引无效:', recordIndex, '数组长度:', purchases.length);
             alert('编辑失败：无法找到要更新的记录，请刷新页面后重试');
@@ -749,10 +750,8 @@ function handleSubmit(e) {
         }
         
         // 如果使用Firebase且旧记录有ID，需要从Firebase删除旧记录（使用ID而不是订单号）
-        if (isFirebaseConfigured && recordId) {
-            const oldRef = database.ref(`purchases/${recordId}`);
-            oldRef.remove().catch(err => console.error('删除旧记录失败:', err));
-        }
+        // 注意：这里不需要删除，因为我们会用相同的ID更新，Firebase会自动覆盖
+        // 但为了确保数据一致性，我们仍然保存整个数组
     } else {
         // 添加新记录到数组开头（最新的在前）
         purchases.unshift(purchaseData);
@@ -765,10 +764,41 @@ function handleSubmit(e) {
         return dateB - dateA; // 倒序：最新日期在前
     });
     
+    // 确保 purchases 数组不为空且包含更新后的记录
+    console.log('保存后 purchases 数组长度:', purchases.length);
+    console.log('保存后的记录:', purchaseData);
+    
+    // 验证记录是否在数组中
+    const savedRecord = purchases.find(p => p.id === purchaseData.id);
+    if (!savedRecord) {
+        console.error('保存失败：记录未在数组中找到');
+        alert('保存失败：记录未正确保存，请刷新页面后重试');
+        return;
+    }
+    
     // 保存数据
-    saveData();
+    try {
+        saveData();
+    } catch (error) {
+        console.error('保存数据时出错:', error);
+        alert('保存数据时出错，但记录已更新');
+    }
+    
+    // 更新 filteredPurchases
     filteredPurchases = [...purchases];
-    renderTable();
+    console.log('filteredPurchases 更新后长度:', filteredPurchases.length);
+    
+    // 渲染表格
+    try {
+        renderTable();
+    } catch (error) {
+        console.error('渲染表格时出错:', error);
+        alert('渲染表格时出错，请刷新页面');
+        // 即使出错也要关闭模态框
+        closeModal();
+        return;
+    }
+    
     closeModal();
     
     // 显示保存成功提示
@@ -780,17 +810,27 @@ function editPurchase(idOrIndex) {
     let purchaseIndex = -1;
     let purchaseToEdit = null;
     
+    console.log('编辑记录，传入参数:', idOrIndex, '类型:', typeof idOrIndex);
+    
     // 如果传入的是ID（字符串），通过ID查找
-    if (typeof idOrIndex === 'string' && idOrIndex) {
+    if (typeof idOrIndex === 'string' && idOrIndex && !idOrIndex.match(/^\d+$/)) {
+        // 是字符串ID，不是纯数字
         purchaseIndex = purchases.findIndex(p => p.id === idOrIndex);
         if (purchaseIndex >= 0) {
             purchaseToEdit = purchases[purchaseIndex];
+            console.log('通过ID找到记录，索引:', purchaseIndex);
+        } else {
+            // 如果通过ID找不到，尝试通过创建时间和订单号匹配
+            console.log('通过ID找不到，尝试其他方式查找');
         }
-    } else {
-        // 兼容旧代码：如果传入的是数字索引（filteredPurchases的索引）
+    }
+    
+    // 如果还没找到，尝试作为索引处理
+    if (purchaseIndex === -1) {
         const actualIndex = typeof idOrIndex === 'number' ? idOrIndex : parseInt(idOrIndex);
-        if (actualIndex >= 0 && actualIndex < filteredPurchases.length) {
+        if (!isNaN(actualIndex) && actualIndex >= 0 && actualIndex < filteredPurchases.length) {
             purchaseToEdit = filteredPurchases[actualIndex];
+            console.log('通过索引找到记录:', purchaseToEdit);
             
             if (purchaseToEdit) {
                 // 使用 ID 或订单号+创建时间在 purchases 数组中查找实际索引
@@ -809,10 +849,13 @@ function editPurchase(idOrIndex) {
     
     if (purchaseIndex === -1 || !purchaseToEdit) {
         console.error('找不到要编辑的记录，ID/索引:', idOrIndex);
+        console.error('当前 purchases 数组:', purchases);
+        console.error('当前 filteredPurchases 数组:', filteredPurchases);
         alert('找不到要编辑的记录，请刷新页面后重试');
         return;
     }
     
+    console.log('准备打开编辑模态框，索引:', purchaseIndex);
     openModal(purchaseIndex);
 }
 
@@ -865,6 +908,12 @@ function deletePurchase(index) {
 
 // 渲染表格
 function renderTable() {
+    // 确保 tableBody 存在
+    if (!tableBody) {
+        console.error('tableBody 元素不存在');
+        return;
+    }
+    
     // 如果没有数据，初始化filteredPurchases
     if (filteredPurchases.length === 0 && purchases.length > 0) {
         filteredPurchases = [...purchases];
@@ -872,15 +921,19 @@ function renderTable() {
     
     // 如果没有数据，显示空状态
     if (filteredPurchases.length === 0) {
-        tableBody.innerHTML = `
-            <tr>
-                <td colspan="9" class="empty-state">
-                    <p>暂无采购记录</p>
-                    <p style="font-size: 14px; margin-top: 8px;">点击"添加采购记录"按钮开始添加</p>
-                </td>
-            </tr>
-        `;
-        pagination.style.display = 'none';
+        if (tableBody) {
+            tableBody.innerHTML = `
+                <tr>
+                    <td colspan="9" class="empty-state">
+                        <p>暂无采购记录</p>
+                        <p style="font-size: 14px; margin-top: 8px;">点击"添加采购记录"按钮开始添加</p>
+                    </td>
+                </tr>
+            `;
+        }
+        if (pagination) {
+            pagination.style.display = 'none';
+        }
         return;
     }
     
@@ -963,7 +1016,7 @@ function renderTable() {
                     <span class="status-badge ${shippedStatusClass}">${shippedStatusText}</span>
                 </td>
                 <td>
-                    <button class="btn btn-edit" onclick="editPurchase('${purchase.id || actualIndex}')">编辑</button>
+                    <button class="btn btn-edit" onclick="editPurchase('${purchase.id || (purchase.createdAt ? purchase.createdAt + '_' + purchase.orderNumber : actualIndex.toString())}')">编辑</button>
                     <button class="btn btn-delete" onclick="deletePurchase(${index})">删除</button>
                 </td>
             </tr>
