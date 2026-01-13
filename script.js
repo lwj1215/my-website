@@ -27,7 +27,25 @@ let isFirebaseConfigured = false;
 function initFirebase() {
     try {
         if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY") {
-            firebase.initializeApp(firebaseConfig);
+            // 清理配置中的空格
+            const cleanedConfig = {
+                apiKey: firebaseConfig.apiKey.trim(),
+                authDomain: firebaseConfig.authDomain ? firebaseConfig.authDomain.trim() : '',
+                databaseURL: firebaseConfig.databaseURL ? firebaseConfig.databaseURL.trim() : '',
+                projectId: firebaseConfig.projectId ? firebaseConfig.projectId.trim() : '',
+                storageBucket: firebaseConfig.storageBucket ? firebaseConfig.storageBucket.trim() : '',
+                messagingSenderId: firebaseConfig.messagingSenderId ? firebaseConfig.messagingSenderId.trim() : '',
+                appId: firebaseConfig.appId ? firebaseConfig.appId.trim() : ''
+            };
+            
+            // 验证 databaseURL 格式
+            if (cleanedConfig.databaseURL && !cleanedConfig.databaseURL.startsWith('https://')) {
+                console.error('Firebase databaseURL 格式不正确，应该以 https:// 开头');
+                updateSyncStatus(false);
+                return false;
+            }
+            
+            firebase.initializeApp(cleanedConfig);
             database = firebase.database();
             isFirebaseConfigured = true;
             console.log('Firebase已初始化');
@@ -41,6 +59,8 @@ function initFirebase() {
     } catch (error) {
         console.error('Firebase初始化失败:', error);
         updateSyncStatus(false);
+        // 初始化失败时，自动回退到本地存储
+        alert('Firebase连接失败，已切换到本地存储模式。请检查Firebase配置是否正确。');
         return false;
     }
 }
@@ -364,45 +384,56 @@ let isSavingToFirebase = false; // 标记是否正在保存到Firebase
 function loadData() {
     if (isFirebaseConfigured) {
         // 从Firebase加载数据（使用订单号作为key）
-        const purchasesRef = database.ref('purchases');
-        
-        // 如果已有监听器，先取消
-        if (firebaseListener) {
-            purchasesRef.off('value', firebaseListener);
-        }
-        
-        // 设置新的监听器
-        firebaseListener = (snapshot) => {
-            // 如果正在保存到Firebase，忽略这次更新（避免覆盖本地修改）
-            if (isSavingToFirebase) {
-                console.log('正在保存到Firebase，忽略监听器更新');
-                return;
+        try {
+            const purchasesRef = database.ref('purchases');
+            
+            // 如果已有监听器，先取消
+            if (firebaseListener) {
+                purchasesRef.off('value', firebaseListener);
             }
             
-            const data = snapshot.val();
-            if (data) {
-                // 将对象转换为数组并按订单日期倒序排列（最新的在前）
-                purchases = Object.values(data);
-                purchases.sort((a, b) => {
-                    const dateA = new Date(a.orderDate || a.createdAt || a.updatedAt || 0).getTime();
-                    const dateB = new Date(b.orderDate || b.createdAt || b.updatedAt || 0).getTime();
-                    return dateB - dateA; // 倒序：最新日期在前
-                });
-                filteredPurchases = [...purchases];
-                renderTable();
-            } else {
-                purchases = [];
-                filteredPurchases = [];
-                renderTable();
-            }
-        };
-        
-        purchasesRef.on('value', firebaseListener, (error) => {
-            console.error('加载数据失败:', error);
+            // 设置新的监听器
+            firebaseListener = (snapshot) => {
+                // 如果正在保存到Firebase，忽略这次更新（避免覆盖本地修改）
+                if (isSavingToFirebase) {
+                    console.log('正在保存到Firebase，忽略监听器更新');
+                    return;
+                }
+                
+                const data = snapshot.val();
+                if (data) {
+                    // 将对象转换为数组并按订单日期倒序排列（最新的在前）
+                    purchases = Object.values(data);
+                    purchases.sort((a, b) => {
+                        const dateA = new Date(a.orderDate || a.createdAt || a.updatedAt || 0).getTime();
+                        const dateB = new Date(b.orderDate || b.createdAt || b.updatedAt || 0).getTime();
+                        return dateB - dateA; // 倒序：最新日期在前
+                    });
+                    filteredPurchases = [...purchases];
+                    renderTable();
+                } else {
+                    purchases = [];
+                    filteredPurchases = [];
+                    renderTable();
+                }
+            };
+            
+            purchasesRef.on('value', firebaseListener, (error) => {
+                console.error('Firebase加载数据失败:', error);
+                console.error('错误详情:', error.message || error);
+                updateSyncStatus(false);
+                isFirebaseConfigured = false;
+                // Firebase加载失败时，尝试从本地存储加载
+                alert('Firebase连接失败，已切换到本地存储模式。');
+                loadDataFromLocal();
+            });
+        } catch (error) {
+            console.error('Firebase连接错误:', error);
             updateSyncStatus(false);
-            // Firebase加载失败时，尝试从本地存储加载
+            isFirebaseConfigured = false;
+            alert('Firebase连接错误，已切换到本地存储模式。请检查网络连接和Firebase配置。');
             loadDataFromLocal();
-        });
+        }
     } else {
         // 从本地存储加载数据
         loadDataFromLocal();
@@ -442,35 +473,47 @@ function saveData() {
         // 标记正在保存到Firebase，避免监听器覆盖数据
         isSavingToFirebase = true;
         
-        // 保存到Firebase（使用唯一ID作为key，支持订单号重复）
-        const purchasesRef = database.ref('purchases');
-        const purchasesObj = {};
-        
-        // 确保所有记录都有ID
-        purchases.forEach((purchase) => {
-            // 如果没有ID，生成一个
-            const id = purchase.id || Date.now().toString(36) + Math.random().toString(36).substr(2);
-            purchase.id = id;
-            purchasesObj[id] = purchase;
-        });
-        
-        console.log('准备保存到Firebase，记录数量:', purchases.length);
-        console.log('保存的数据:', purchasesObj);
-        
-        purchasesRef.set(purchasesObj).then(() => {
-            console.log('数据已保存到云端，记录数量:', purchases.length);
-            // 保存成功后，延迟取消标记，确保数据已同步
-            setTimeout(() => {
+        try {
+            // 保存到Firebase（使用唯一ID作为key，支持订单号重复）
+            const purchasesRef = database.ref('purchases');
+            const purchasesObj = {};
+            
+            // 确保所有记录都有ID
+            purchases.forEach((purchase) => {
+                // 如果没有ID，生成一个
+                const id = purchase.id || Date.now().toString(36) + Math.random().toString(36).substr(2);
+                purchase.id = id;
+                purchasesObj[id] = purchase;
+            });
+            
+            console.log('准备保存到Firebase，记录数量:', purchases.length);
+            console.log('保存的数据:', purchasesObj);
+            
+            purchasesRef.set(purchasesObj).then(() => {
+                console.log('数据已保存到云端，记录数量:', purchases.length);
+                // 保存成功后，延迟取消标记，确保数据已同步
+                setTimeout(() => {
+                    isSavingToFirebase = false;
+                }, 500);
+            }).catch((error) => {
+                console.error('保存数据到Firebase失败:', error);
+                console.error('错误详情:', error.message || error);
                 isSavingToFirebase = false;
-            }, 500);
-        }).catch((error) => {
-            console.error('保存数据失败:', error);
+                isFirebaseConfigured = false;
+                updateSyncStatus(false);
+                alert('Firebase保存失败，已切换到本地存储模式。数据已保存到本地。');
+                // Firebase保存失败时，保存到本地存储作为备份
+                saveDataToLocal();
+            });
+        } catch (error) {
+            console.error('Firebase连接错误:', error);
             isSavingToFirebase = false;
-            alert('保存数据失败，请检查网络连接');
+            isFirebaseConfigured = false;
             updateSyncStatus(false);
-            // Firebase保存失败时，保存到本地存储作为备份
+            alert('Firebase连接错误，已切换到本地存储模式。数据已保存到本地。');
+            // Firebase连接错误时，保存到本地存储
             saveDataToLocal();
-        });
+        }
     } else {
         // 保存到本地存储
         saveDataToLocal();
