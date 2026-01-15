@@ -645,6 +645,7 @@ function openModal(index = -1) {
         // 设置订单日期，如果没有则使用创建日期或今天
         const orderDate = purchase.orderDate || purchase.createdAt?.split('T')[0] || new Date().toISOString().split('T')[0];
         document.getElementById('orderDate').value = orderDate;
+        document.getElementById('paidDeposit').checked = purchase.paidDeposit || false;
         document.getElementById('paidInFull').checked = purchase.paidInFull || false;
         document.getElementById('shipped').checked = purchase.shipped || false;
         
@@ -699,6 +700,7 @@ function handleSubmit(e) {
     const buyerName = document.getElementById('buyerName').value.trim();
     const orderNumber = document.getElementById('orderNumber').value.trim();
     const orderDate = document.getElementById('orderDate').value;
+    const paidDeposit = document.getElementById('paidDeposit').checked;
     const paidInFull = document.getElementById('paidInFull').checked;
     const shipped = document.getElementById('shipped').checked;
     
@@ -776,6 +778,7 @@ function handleSubmit(e) {
         orderDate,
         suppliers: finalSuppliers, // 保留suppliers字段以兼容旧代码
         purchaseItems: finalPurchaseItems,
+        paidDeposit,
         paidInFull,
         shipped,
         createdAt: oldPurchase ? oldPurchase.createdAt : new Date().toISOString(),
@@ -879,7 +882,7 @@ function handleSubmit(e) {
     closeModal();
     
     // 显示保存成功提示
-   // alert('保存成功！');
+    alert('保存成功！');
 }
 
 // 编辑记录
@@ -1062,6 +1065,9 @@ function renderTable() {
             itemsHtml = '<span style="color: #6c757d;">暂无</span>';
         }
         
+        const depositStatusClass = purchase.paidDeposit ? 'status-paid' : 'status-unpaid';
+        const depositStatusText = purchase.paidDeposit ? '已付' : '未付';
+        
         const paidStatusClass = purchase.paidInFull ? 'status-paid' : 'status-unpaid';
         const paidStatusText = purchase.paidInFull ? '已付清' : '未付清';
         
@@ -1085,6 +1091,9 @@ function renderTable() {
                 </td>
                 <td>
                     ${itemsHtml}
+                </td>
+                <td>
+                    <span class="status-badge ${depositStatusClass}">${depositStatusText}</span>
                 </td>
                 <td>
                     <span class="status-badge ${paidStatusClass}">${paidStatusText}</span>
@@ -1227,6 +1236,9 @@ function performSearch() {
         const orderDate = purchase.orderDate || purchase.createdAt?.split('T')[0] || '';
         const formattedDate = orderDate ? new Date(orderDate).toLocaleDateString('zh-CN') : '未设置';
         
+        const depositStatusClass = purchase.paidDeposit ? 'status-paid' : 'status-unpaid';
+        const depositStatusText = purchase.paidDeposit ? '已付' : '未付';
+        
         const paidStatusClass = purchase.paidInFull ? 'status-paid' : 'status-unpaid';
         const paidStatusText = purchase.paidInFull ? '已付清' : '未付清';
         
@@ -1276,6 +1288,7 @@ function performSearch() {
                     </div>
                 </div>
                 <div class="search-status-group">
+                    <span class="status-badge ${depositStatusClass}">定金：${depositStatusText}</span>
                     <span class="status-badge ${paidStatusClass}">尾款：${paidStatusText}</span>
                     <span class="status-badge ${shippedStatusClass}">发货：${shippedStatusText}</span>
                     <span class="status-badge ${overallStatusClass}">${overallStatusText}</span>
