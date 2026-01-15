@@ -2,8 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content
-        ="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>采购管理系统</title>
     <link rel="stylesheet" href="styles.css">
     <!-- Firebase SDK -->
@@ -72,6 +71,7 @@
                         <th>订单号</th>
                         <th>采购商姓名</th>
                         <th>采购物品</th>
+                        <th>是否付定金</th>
                         <th>是否已付清尾款</th>
                         <th>是否已发货</th>
                         <th>操作</th>
@@ -127,6 +127,13 @@
                         <!-- 采购项组将动态添加 -->
                     </div>
                     <button type="button" class="btn btn-add-purchase-item" id="addPurchaseItemBtn">+ 添加采购项</button>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="paidDeposit" name="paidDeposit">
+                        <span>已付定金</span>
+                    </label>
                 </div>
 
                 <div class="form-group">
