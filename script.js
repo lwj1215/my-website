@@ -10,7 +10,7 @@ let filteredPurchases = []; // 用于存储过滤后的数据（搜索时使用�
 // Firebase配置
 const firebaseConfig = {
     // 这里需要用户配置自己的Firebase项目信息
-   apiKey: "AIzaSyDaVI4B_vXCg9uf9fZL-oSUudj8xvhaws4",
+    apiKey: "AIzaSyDaVI4B_vXCg9uf9fZL-oSUudj8xvhaws4",
   authDomain: "caigouweb.firebaseapp.com",
   databaseURL: "https://caigouweb-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "caigouweb",
@@ -1004,7 +1004,7 @@ function renderTable() {
         if (tableBody) {
             tableBody.innerHTML = `
                 <tr>
-                    <td colspan="9" class="empty-state">
+                    <td colspan="10" class="empty-state">
                         <p>暂无采购记录</p>
                         <p style="font-size: 14px; margin-top: 8px;">点击"添加采购记录"按钮开始添加</p>
                     </td>
