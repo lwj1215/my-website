@@ -309,7 +309,7 @@ tbody tr:hover {
     color: #495057;
 }
 
-/* 模态框样式 */
+/* 妯℃€佹鏍峰紡 */
 .modal {
     display: none;
     position: fixed;
@@ -336,7 +336,7 @@ tbody tr:hover {
     flex-direction: column;
     overflow: hidden;
     cursor: default;
-    transition: none; /* 拖动时禁用过渡动画 */
+    transition: none; /* 鎷栧姩鏃剁鐢ㄨ繃娓″姩鐢� */
 }
 
 .modal-content.dragging {
@@ -395,7 +395,7 @@ form {
     min-height: 0;
 }
 
-/* 自定义表单滚动条样式 */
+/* 鑷畾涔夎〃鍗曟粴鍔ㄦ潯鏍峰紡 */
 form::-webkit-scrollbar {
     width: 8px;
 }
@@ -475,7 +475,7 @@ form::-webkit-scrollbar-thumb:hover {
     opacity: 1;
 }
 
-/* 改善日期选择器的显示 */
+/* 鏀瑰杽鏃ユ湡閫夋嫨鍣ㄧ殑鏄剧ず */
 .form-group input[type="date"]::-webkit-datetime-edit {
     padding: 0;
     font-size: 16px;
@@ -515,7 +515,7 @@ form::-webkit-scrollbar-thumb:hover {
     padding-right: 8px;
 }
 
-/* 自定义滚动条样式 */
+/* 鑷畾涔夋粴鍔ㄦ潯鏍峰紡 */
 .purchase-items-container::-webkit-scrollbar {
     width: 6px;
 }
@@ -731,7 +731,7 @@ form::-webkit-scrollbar-thumb:hover {
     margin-top: 12px;
 }
 
-/* 分页样式 */
+/* 鍒嗛〉鏍峰紡 */
 .pagination {
     display: flex;
     justify-content: space-between;
@@ -917,7 +917,7 @@ form::-webkit-scrollbar-thumb:hover {
     display: none !important;
 }
 
-/* 响应式设计 */
+/* 鍝嶅簲寮忚璁� */
 @media (max-width: 768px) {
     header {
         flex-direction: column;
@@ -956,8 +956,132 @@ form::-webkit-scrollbar-thumb:hover {
     }
 
     .form-group input[type="date"] {
-        font-size: 16px; /* 防止iOS自动缩放 */
+        font-size: 16px; /* 闃叉iOS鑷姩缂╂斁 */
         padding: 16px;
         min-height: 52px;
     }
+}
+
+/* 鍥剧墖鐩稿叧鏍峰紡 */
+.image-preview-container,
+.existing-images-container {
+    margin-top: 10px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    min-height: 50px;
+}
+
+.existing-image-wrapper {
+    position: relative;
+    display: inline-block;
+    margin: 5px;
+}
+
+.existing-image-wrapper img {
+    width: 100px;
+    height: 100px;
+    object-fit: cover;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 2px solid #ddd;
+    transition: transform 0.2s;
+}
+
+.existing-image-wrapper img:hover {
+    transform: scale(1.05);
+    border-color: #667eea;
+}
+
+.existing-image-wrapper .btn-delete {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    font-size: 18px;
+    line-height: 1;
+    border-radius: 50%;
+    background: #ff4444;
+    color: white;
+    border: 2px solid white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.existing-image-wrapper .btn-delete:hover {
+    background: #cc0000;
+}
+
+.existing-image-wrapper .replace-btn {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    padding: 4px;
+    font-size: 11px;
+    line-height: 1.2;
+    border-radius: 0 0 4px 4px;
+    background: rgba(102, 126, 234, 0.9);
+    color: white;
+    border: none;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.existing-image-wrapper:hover .replace-btn {
+    opacity: 1;
+}
+
+.existing-image-wrapper .replace-btn:hover {
+    background: rgba(118, 75, 162, 0.9);
+}
+
+.order-number-link {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.order-number-link:hover {
+    color: #764ba2;
+    text-decoration: underline;
+}
+
+.image-modal-body {
+    padding: 20px;
+    max-height: 70vh;
+    overflow-y: auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+.image-modal-body img {
+    margin: 10px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.image-modal-body img:hover {
+    transform: scale(1.02);
+}
+
+#orderImages {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
 }
