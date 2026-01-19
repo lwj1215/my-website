@@ -117,6 +117,11 @@ const imageModal = document.getElementById('imageModal');
 const imageModalTitle = document.getElementById('imageModalTitle');
 const imageModalBody = document.getElementById('imageModalBody');
 const closeImageModal = document.getElementById('closeImageModal');
+const totalAmountInput = document.getElementById('totalAmount');
+const depositAmountInput = document.getElementById('depositAmount');
+const finalPaymentAmountInput = document.getElementById('finalPaymentAmount');
+const unpaidAmountDisplay = document.getElementById('unpaidAmountDisplay');
+const unpaidAmountSpan = document.getElementById('unpaidAmount');
 // 登录相关DOM元素将在initLogin中获取，确保DOM已加载
 let loginOverlay = null;
 let loginForm = null;
@@ -264,6 +269,9 @@ function startApp() {
             }
         });
     }
+    
+    // 金额计算相关事件监听
+    setupAmountCalculation();
     clearBtn.addEventListener('click', clearSearch);
     addPurchaseItemBtn.addEventListener('click', addPurchaseItemGroup);
     exportBtn.addEventListener('click', exportData);
@@ -672,6 +680,18 @@ function openModal(index = -1) {
         document.getElementById('paidInFull').checked = purchase.paidInFull || false;
         document.getElementById('shipped').checked = purchase.shipped || false;
         
+        // 加载金额信息
+        if (totalAmountInput) {
+            totalAmountInput.value = purchase.totalAmount || '';
+        }
+        if (depositAmountInput) {
+            depositAmountInput.value = purchase.depositAmount || '';
+        }
+        if (finalPaymentAmountInput) {
+            finalPaymentAmountInput.value = purchase.finalPaymentAmount || '';
+        }
+        calculateUnpaidAmount();
+        
         // 加载已存在的图片
         editingImages = purchase.images ? [...purchase.images] : [];
         loadExistingImages(editingImages);
@@ -707,6 +727,11 @@ function openModal(index = -1) {
         // 设置默认订单日期为今天
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('orderDate').value = today;
+        // 清空金额字段
+        if (totalAmountInput) totalAmountInput.value = '';
+        if (depositAmountInput) depositAmountInput.value = '';
+        if (finalPaymentAmountInput) finalPaymentAmountInput.value = '';
+        calculateUnpaidAmount();
         // 清空图片预览和已存在图片
         editingImages = [];
         clearImagePreviews();
@@ -735,6 +760,11 @@ async function handleSubmit(e) {
     const paidDeposit = document.getElementById('paidDeposit').checked;
     const paidInFull = document.getElementById('paidInFull').checked;
     const shipped = document.getElementById('shipped').checked;
+    
+    // 获取金额信息
+    const totalAmount = parseFloat(totalAmountInput?.value || 0) || 0;
+    const depositAmount = parseFloat(depositAmountInput?.value || 0) || 0;
+    const finalPaymentAmount = parseFloat(finalPaymentAmountInput?.value || 0) || 0;
     
     // 获取所有采购项
     const purchaseItemGroups = purchaseItemsContainer.querySelectorAll('.purchase-item-group');
@@ -816,6 +846,9 @@ async function handleSubmit(e) {
         paidDeposit,
         paidInFull,
         shipped,
+        totalAmount: totalAmount || 0,
+        depositAmount: depositAmount || 0,
+        finalPaymentAmount: finalPaymentAmount || 0,
         images: images, // 添加图片数组
         createdAt: oldPurchase ? oldPurchase.createdAt : new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -1101,11 +1134,27 @@ function renderTable() {
             itemsHtml = '<span style="color: #6c757d;">暂无</span>';
         }
         
-        const depositStatusClass = purchase.paidDeposit ? 'status-paid' : 'status-unpaid';
-        const depositStatusText = purchase.paidDeposit ? '已付' : '未付';
+        // 金额信息
+        const totalAmount = purchase.totalAmount || 0;
+        const depositAmount = purchase.depositAmount || 0;
+        const finalPaymentAmount = purchase.finalPaymentAmount || 0;
+        const unpaidAmount = totalAmount - depositAmount - finalPaymentAmount;
         
+        // 定金显示
+        const depositStatusClass = purchase.paidDeposit ? 'status-paid' : 'status-unpaid';
+        let depositStatusText = purchase.paidDeposit ? '已付' : '未付';
+        if (purchase.paidDeposit && depositAmount > 0) {
+            depositStatusText = `已付 ¥${depositAmount.toFixed(2)}`;
+        }
+        
+        // 尾款显示
         const paidStatusClass = purchase.paidInFull ? 'status-paid' : 'status-unpaid';
-        const paidStatusText = purchase.paidInFull ? '已付清' : '未付清';
+        let paidStatusText = purchase.paidInFull ? '已付清' : '未付清';
+        if (!purchase.paidInFull && unpaidAmount > 0) {
+            paidStatusText = `未付 ¥${unpaidAmount.toFixed(2)}`;
+        } else if (purchase.paidInFull && finalPaymentAmount > 0) {
+            paidStatusText = `已付清 ¥${finalPaymentAmount.toFixed(2)}`;
+        }
         
         const shippedStatusClass = purchase.shipped ? 'status-shipped' : 'status-not-shipped';
         const shippedStatusText = purchase.shipped ? '已发货' : '未发货';
@@ -1274,11 +1323,27 @@ function performSearch() {
         const orderDate = purchase.orderDate || purchase.createdAt?.split('T')[0] || '';
         const formattedDate = orderDate ? new Date(orderDate).toLocaleDateString('zh-CN') : '未设置';
         
-        const depositStatusClass = purchase.paidDeposit ? 'status-paid' : 'status-unpaid';
-        const depositStatusText = purchase.paidDeposit ? '已付' : '未付';
+        // 金额信息
+        const totalAmount = purchase.totalAmount || 0;
+        const depositAmount = purchase.depositAmount || 0;
+        const finalPaymentAmount = purchase.finalPaymentAmount || 0;
+        const unpaidAmount = totalAmount - depositAmount - finalPaymentAmount;
         
+        // 定金显示
+        const depositStatusClass = purchase.paidDeposit ? 'status-paid' : 'status-unpaid';
+        let depositStatusText = purchase.paidDeposit ? '已付' : '未付';
+        if (purchase.paidDeposit && depositAmount > 0) {
+            depositStatusText = `已付 ¥${depositAmount.toFixed(2)}`;
+        }
+        
+        // 尾款显示
         const paidStatusClass = purchase.paidInFull ? 'status-paid' : 'status-unpaid';
-        const paidStatusText = purchase.paidInFull ? '已付清' : '未付清';
+        let paidStatusText = purchase.paidInFull ? '已付清' : '未付清';
+        if (!purchase.paidInFull && unpaidAmount > 0) {
+            paidStatusText = `未付 ¥${unpaidAmount.toFixed(2)}`;
+        } else if (purchase.paidInFull && finalPaymentAmount > 0) {
+            paidStatusText = `已付清 ¥${finalPaymentAmount.toFixed(2)}`;
+        }
         
         const shippedStatusClass = purchase.shipped ? 'status-shipped' : 'status-not-shipped';
         const shippedStatusText = purchase.shipped ? '已发货' : '未发货';
@@ -1725,4 +1790,46 @@ function viewImage(imageData) {
     
     fullscreenModal.appendChild(img);
     document.body.appendChild(fullscreenModal);
+}
+
+// ========== 金额计算相关函数 ==========
+
+// 设置金额计算
+function setupAmountCalculation() {
+    if (totalAmountInput) {
+        totalAmountInput.addEventListener('input', calculateUnpaidAmount);
+    }
+    if (depositAmountInput) {
+        depositAmountInput.addEventListener('input', calculateUnpaidAmount);
+    }
+    if (finalPaymentAmountInput) {
+        finalPaymentAmountInput.addEventListener('input', calculateUnpaidAmount);
+    }
+}
+
+// 计算未付金额
+function calculateUnpaidAmount() {
+    if (!unpaidAmountDisplay || !unpaidAmountSpan) return;
+    
+    const totalAmount = parseFloat(totalAmountInput?.value || 0) || 0;
+    const depositAmount = parseFloat(depositAmountInput?.value || 0) || 0;
+    const finalPaymentAmount = parseFloat(finalPaymentAmountInput?.value || 0) || 0;
+    
+    const unpaidAmount = totalAmount - depositAmount - finalPaymentAmount;
+    
+    if (totalAmount > 0) {
+        unpaidAmountSpan.textContent = unpaidAmount.toFixed(2);
+        unpaidAmountDisplay.style.display = 'block';
+        
+        // 根据未付金额设置颜色
+        if (unpaidAmount <= 0) {
+            unpaidAmountDisplay.style.background = '#d4edda';
+            unpaidAmountDisplay.style.color = '#155724';
+        } else {
+            unpaidAmountDisplay.style.background = '#fff3cd';
+            unpaidAmountDisplay.style.color = '#856404';
+        }
+    } else {
+        unpaidAmountDisplay.style.display = 'none';
+    }
 }
