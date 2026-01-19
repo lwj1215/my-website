@@ -1085,3 +1085,27 @@ form::-webkit-scrollbar-thumb:hover {
     border-radius: 4px;
     font-size: 14px;
 }
+
+/* 閲戦鐩稿叧鏍峰紡 */
+#totalAmount,
+#depositAmount,
+#finalPaymentAmount {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    margin-top: 8px;
+}
+
+#unpaidAmountDisplay {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.status-badge {
+    white-space: nowrap;
+}
