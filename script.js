@@ -1,6 +1,7 @@
 // 采购数据存储
 let purchases = [];
 let editingIndex = -1;
+let editingImages = []; // 存储编辑时的图片
 
 // 分页相关
 let currentPage = 1;
@@ -10,14 +11,13 @@ let filteredPurchases = []; // 用于存储过滤后的数据（搜索时使用�
 // Firebase配置
 const firebaseConfig = {
     // 这里需要用户配置自己的Firebase项目信息
-    apiKey: "AIzaSyDaVI4B_vXCg9uf9fZL-oSUudj8xvhaws4",
-  authDomain: "caigouweb.firebaseapp.com",
-  databaseURL: "https://caigouweb-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "caigouweb",
-  storageBucket: "caigouweb.firebasestorage.app",
-  messagingSenderId: "884397514172",
-  appId: "1:884397514172:web:2edde3249c352a3afd1fb9",
-  measurementId: "G-6LDPJ7WCES"
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_AUTH_DOMAIN",
+    databaseURL: "YOUR_DATABASE_URL",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_STORAGE_BUCKET",
+    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+    appId: "YOUR_APP_ID"
 };
 
 // 初始化Firebase
@@ -109,6 +109,13 @@ const modalHeader = document.querySelector('.modal-header');
 const exportBtn = document.getElementById('exportBtn');
 const importBtn = document.getElementById('importBtn');
 const importFileInput = document.getElementById('importFileInput');
+const orderImagesInput = document.getElementById('orderImages');
+const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+const existingImagesContainer = document.getElementById('existingImagesContainer');
+const imageModal = document.getElementById('imageModal');
+const imageModalTitle = document.getElementById('imageModalTitle');
+const imageModalBody = document.getElementById('imageModalBody');
+const closeImageModal = document.getElementById('closeImageModal');
 // 登录相关DOM元素将在initLogin中获取，确保DOM已加载
 let loginOverlay = null;
 let loginForm = null;
@@ -241,6 +248,21 @@ function startApp() {
     cancelBtn.addEventListener('click', () => closeModal());
     form.addEventListener('submit', handleSubmit);
     searchBtn.addEventListener('click', performSearch);
+    
+    // 图片相关事件监听
+    setupImagePreview();
+    if (closeImageModal) {
+        closeImageModal.addEventListener('click', () => {
+            if (imageModal) imageModal.style.display = 'none';
+        });
+    }
+    if (imageModal) {
+        imageModal.addEventListener('click', (e) => {
+            if (e.target === imageModal) {
+                imageModal.style.display = 'none';
+            }
+        });
+    }
     clearBtn.addEventListener('click', clearSearch);
     addPurchaseItemBtn.addEventListener('click', addPurchaseItemGroup);
     exportBtn.addEventListener('click', exportData);
@@ -649,6 +671,10 @@ function openModal(index = -1) {
         document.getElementById('paidInFull').checked = purchase.paidInFull || false;
         document.getElementById('shipped').checked = purchase.shipped || false;
         
+        // 加载已存在的图片
+        editingImages = purchase.images ? [...purchase.images] : [];
+        loadExistingImages(editingImages);
+        
         // 加载采购项（兼容旧数据格式）
         if (purchase.purchaseItems && purchase.purchaseItems.length > 0) {
             purchase.purchaseItems.forEach(purchaseItem => {
@@ -680,6 +706,9 @@ function openModal(index = -1) {
         // 设置默认订单日期为今天
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('orderDate').value = today;
+        // 清空图片预览和已存在图片
+        editingImages = [];
+        clearImagePreviews();
         // 不再自动添加采购项，用户可以选择性添加
     }
     modal.style.display = 'block';
@@ -690,11 +719,13 @@ function closeModal() {
     modal.style.display = 'none';
     form.reset();
     purchaseItemsContainer.innerHTML = '';
+    editingImages = [];
+    clearImagePreviews();
     editingIndex = -1;
 }
 
 // 处理表单提交
-function handleSubmit(e) {
+async function handleSubmit(e) {
     e.preventDefault();
     
     const buyerName = document.getElementById('buyerName').value.trim();
@@ -771,6 +802,9 @@ function handleSubmit(e) {
         }
     }
     
+    // 处理图片上传（保留编辑时已存在的图片）
+    const images = await processImages(editingImages);
+    
     const purchaseData = {
         id: uniqueId, // 添加唯一ID用于Firebase存储
         buyerName,
@@ -781,6 +815,7 @@ function handleSubmit(e) {
         paidDeposit,
         paidInFull,
         shipped,
+        images: images, // 添加图片数组
         createdAt: oldPurchase ? oldPurchase.createdAt : new Date().toISOString(),
         updatedAt: new Date().toISOString()
     };
@@ -1083,7 +1118,9 @@ function renderTable() {
                 <td>${actualIndex + 1}</td>
                 <td>${formattedDate}</td>
                 <td>${purchase.buyerName}</td>
-                <td>${purchase.orderNumber}</td>
+                <td>
+                    <a href="javascript:void(0)" class="order-number-link" onclick="viewOrderImages('${purchase.id || (purchase.createdAt ? purchase.createdAt + '_' + purchase.orderNumber : actualIndex.toString())}')" title="点击查看订单图片">${purchase.orderNumber}</a>
+                </td>
                 <td>
                     <div class="supplier-list">
                         ${suppliersHtml || '<span style="color: #6c757d;">暂无</span>'}
@@ -1444,4 +1481,247 @@ function handleImportFile(event) {
     };
     
     reader.readAsText(file);
+}
+
+// ========== 图片处理相关函数 ==========
+
+// 处理图片上传和转换
+async function processImages(existingImages = []) {
+    const images = [...existingImages]; // 保留已存在的图片
+    
+    // 获取新上传的图片文件
+    if (orderImagesInput && orderImagesInput.files && orderImagesInput.files.length > 0) {
+        const filePromises = Array.from(orderImagesInput.files).map(file => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    resolve(e.target.result); // base64 字符串
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        });
+        
+        try {
+            const newImages = await Promise.all(filePromises);
+            images.push(...newImages);
+        } catch (error) {
+            console.error('图片处理失败:', error);
+            alert('部分图片处理失败，请重试');
+        }
+    }
+    
+    return images;
+}
+
+// 加载已存在的图片
+function loadExistingImages(images) {
+    if (!existingImagesContainer) return;
+    
+    existingImagesContainer.innerHTML = '';
+    
+    if (images && images.length > 0) {
+        const title = document.createElement('div');
+        title.textContent = '已存在的图片：';
+        title.style.marginBottom = '10px';
+        title.style.fontWeight = 'bold';
+        existingImagesContainer.appendChild(title);
+        
+        images.forEach((imageData, index) => {
+            const imageWrapper = document.createElement('div');
+            imageWrapper.className = 'existing-image-wrapper';
+            imageWrapper.style.cssText = 'position: relative; display: inline-block; margin: 5px;';
+            
+            const img = document.createElement('img');
+            img.src = imageData;
+            img.style.cssText = 'width: 100px; height: 100px; object-fit: cover; border-radius: 4px; cursor: pointer;';
+            img.onclick = () => viewImage(imageData);
+            
+            // 替换按钮
+            const replaceBtn = document.createElement('button');
+            replaceBtn.textContent = '替换';
+            replaceBtn.className = 'btn replace-btn';
+            replaceBtn.onclick = (e) => {
+                e.stopPropagation();
+                replaceImage(index);
+            };
+            
+            // 删除按钮
+            const removeBtn = document.createElement('button');
+            removeBtn.textContent = '×';
+            removeBtn.className = 'btn btn-delete';
+            removeBtn.style.cssText = 'position: absolute; top: -5px; right: -5px; width: 20px; height: 20px; padding: 0; font-size: 16px; line-height: 1; border-radius: 50%;';
+            removeBtn.onclick = (e) => {
+                e.stopPropagation();
+                editingImages.splice(index, 1);
+                loadExistingImages(editingImages);
+            };
+            
+            imageWrapper.appendChild(img);
+            imageWrapper.appendChild(replaceBtn);
+            imageWrapper.appendChild(removeBtn);
+            existingImagesContainer.appendChild(imageWrapper);
+        });
+    }
+}
+
+// 替换图片
+function replaceImage(imageIndex) {
+    // 创建隐藏的文件输入框
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.style.display = 'none';
+    
+    fileInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) {
+            document.body.removeChild(fileInput);
+            return;
+        }
+        
+        if (!file.type.startsWith('image/')) {
+            alert('请选择图片文件');
+            document.body.removeChild(fileInput);
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            // 替换指定索引的图片
+            editingImages[imageIndex] = e.target.result;
+            loadExistingImages(editingImages);
+            document.body.removeChild(fileInput);
+        };
+        reader.onerror = () => {
+            alert('图片读取失败，请重试');
+            document.body.removeChild(fileInput);
+        };
+        reader.readAsDataURL(file);
+    };
+    
+    // 添加到页面并触发点击
+    document.body.appendChild(fileInput);
+    fileInput.click();
+}
+
+// 清空图片预览
+function clearImagePreviews() {
+    if (imagePreviewContainer) {
+        imagePreviewContainer.innerHTML = '';
+    }
+    if (existingImagesContainer) {
+        existingImagesContainer.innerHTML = '';
+    }
+    if (orderImagesInput) {
+        orderImagesInput.value = '';
+    }
+}
+
+// 图片上传预览
+function setupImagePreview() {
+    if (!orderImagesInput) return;
+    
+    orderImagesInput.addEventListener('change', function(e) {
+        const files = e.target.files;
+        if (!imagePreviewContainer) return;
+        
+        // 清空之前的预览（只显示新上传的）
+        imagePreviewContainer.innerHTML = '';
+        
+        if (files && files.length > 0) {
+            const title = document.createElement('div');
+            title.textContent = '新上传的图片预览：';
+            title.style.marginBottom = '10px';
+            title.style.fontWeight = 'bold';
+            imagePreviewContainer.appendChild(title);
+            
+            Array.from(files).forEach((file, index) => {
+                if (!file.type.startsWith('image/')) {
+                    return;
+                }
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const imageWrapper = document.createElement('div');
+                    imageWrapper.style.cssText = 'position: relative; display: inline-block; margin: 5px;';
+                    
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    img.style.cssText = 'width: 100px; height: 100px; object-fit: cover; border-radius: 4px; cursor: pointer;';
+                    img.onclick = () => viewImage(e.target.result);
+                    
+                    imageWrapper.appendChild(img);
+                    imagePreviewContainer.appendChild(imageWrapper);
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+    });
+}
+
+// 查看订单图片
+function viewOrderImages(purchaseId) {
+    const purchase = purchases.find(p => 
+        p.id === purchaseId || 
+        (p.createdAt && p.orderNumber && `${p.createdAt}_${p.orderNumber}` === purchaseId) ||
+        purchases.indexOf(p).toString() === purchaseId
+    );
+    
+    if (!purchase) {
+        alert('找不到该订单');
+        return;
+    }
+    
+    const images = purchase.images || [];
+    
+    if (images.length === 0) {
+        alert('该订单暂无图片');
+        return;
+    }
+    
+    // 显示图片模态框
+    if (imageModalTitle) {
+        imageModalTitle.textContent = `订单号：${purchase.orderNumber} - 图片 (${images.length}张)`;
+    }
+    
+    if (imageModalBody) {
+        imageModalBody.innerHTML = '';
+        images.forEach((imageData, index) => {
+            const imageWrapper = document.createElement('div');
+            imageWrapper.style.cssText = 'margin: 10px; text-align: center;';
+            
+            const img = document.createElement('img');
+            img.src = imageData;
+            img.style.cssText = 'max-width: 100%; max-height: 70vh; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); cursor: pointer;';
+            img.onclick = () => viewImage(imageData);
+            
+            const label = document.createElement('div');
+            label.textContent = `图片 ${index + 1}`;
+            label.style.cssText = 'margin-top: 5px; color: #666;';
+            
+            imageWrapper.appendChild(img);
+            imageWrapper.appendChild(label);
+            imageModalBody.appendChild(imageWrapper);
+        });
+    }
+    
+    if (imageModal) {
+        imageModal.style.display = 'block';
+    }
+}
+
+// 查看单张图片（全屏）
+function viewImage(imageData) {
+    const fullscreenModal = document.createElement('div');
+    fullscreenModal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 10000; display: flex; align-items: center; justify-content: center; cursor: pointer;';
+    fullscreenModal.onclick = () => document.body.removeChild(fullscreenModal);
+    
+    const img = document.createElement('img');
+    img.src = imageData;
+    img.style.cssText = 'max-width: 90%; max-height: 90%; object-fit: contain;';
+    img.onclick = (e) => e.stopPropagation();
+    
+    fullscreenModal.appendChild(img);
+    document.body.appendChild(fullscreenModal);
 }
