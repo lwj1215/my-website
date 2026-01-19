@@ -11,13 +11,14 @@ let filteredPurchases = []; // 用于存储过滤后的数据（搜索时使用�
 // Firebase配置
 const firebaseConfig = {
     // 这里需要用户配置自己的Firebase项目信息
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
-    databaseURL: "YOUR_DATABASE_URL",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDaVI4B_vXCg9uf9fZL-oSUudj8xvhaws4",
+  authDomain: "caigouweb.firebaseapp.com",
+  databaseURL: "https://caigouweb-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "caigouweb",
+  storageBucket: "caigouweb.firebasestorage.app",
+  messagingSenderId: "884397514172",
+  appId: "1:884397514172:web:2edde3249c352a3afd1fb9",
+  measurementId: "G-6LDPJ7WCES"
 };
 
 // 初始化Firebase
