@@ -150,11 +150,31 @@
                     </label>
                 </div>
 
+                <div class="form-group">
+                    <label for="orderImages">订单图片</label>
+                    <input type="file" id="orderImages" name="orderImages" accept="image/*" multiple style="margin-bottom: 10px;">
+                    <div id="imagePreviewContainer" class="image-preview-container"></div>
+                    <div id="existingImagesContainer" class="existing-images-container"></div>
+                </div>
+
                 <div class="form-actions">
                     <button type="button" class="btn btn-secondary" id="cancelBtn">取消</button>
                     <button type="submit" class="btn btn-primary">保存</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- 图片查看模态框 -->
+    <div id="imageModal" class="modal">
+        <div class="modal-content" style="max-width: 90%; max-height: 90vh;">
+            <div class="modal-header">
+                <h2 id="imageModalTitle">订单图片</h2>
+                <span class="close" id="closeImageModal">&times;</span>
+            </div>
+            <div id="imageModalBody" class="image-modal-body">
+                <!-- 图片将在这里显示 -->
+            </div>
         </div>
     </div>
 
